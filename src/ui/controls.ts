@@ -13,25 +13,25 @@ export function mountControls(
 	const pane = new Pane({ title: "Lenia", expanded: true })
 
 	pane.addBinding(params, "mu", {
-		label: "μ",
+		label: "How full neighbors should be (μ)",
 		min: 0,
 		max: 1,
 		step: 0.001,
 	})
 	pane.addBinding(params, "sigma", {
-		label: "σ",
+		label: "How wide that target is (σ)",
 		min: 0.001,
 		max: 0.5,
 		step: 0.001,
 	})
 	pane.addBinding(params, "dt", {
-		label: "dt",
+		label: "How much each step changes (dt)",
 		min: 0,
 		max: 1,
 		step: 0.01,
 	})
 	pane.addBinding(params, "radius", {
-		label: "R",
+		label: "How far cells look (R)",
 		min: 1,
 		max: MAX_KERNEL_RADIUS,
 		step: 1,
