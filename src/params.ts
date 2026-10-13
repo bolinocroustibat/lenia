@@ -18,6 +18,6 @@ export function createLeniaParams(): LeniaParams {
 		radius: 13,
 		resolution: 4,
 		speed: 1,
-		paused: false,
+		paused: true,
 	}
 }

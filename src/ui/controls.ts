@@ -1,5 +1,5 @@
 import { Pane } from "tweakpane"
-import type { LeniaParams } from "../params"
+import { createLeniaParams, type LeniaParams } from "../params"
 import { MAX_KERNEL_RADIUS } from "../sim/kernel"
 
 export interface LeniaControls {
@@ -8,7 +8,7 @@ export interface LeniaControls {
 
 export function mountControls(
 	params: LeniaParams,
-	onRandomize: () => void,
+	onReseed: () => void,
 ): LeniaControls {
 	const pane = new Pane({ title: "Lenia", expanded: true })
 
@@ -49,13 +49,22 @@ export function mountControls(
 		step: 1,
 	})
 
-	const pauseButton = pane.addButton({ title: "Pause" })
+	const pauseButton = pane.addButton({
+		title: params.paused ? "Play" : "Pause",
+	})
 	pauseButton.on("click", () => {
 		params.paused = !params.paused
 		pauseButton.title = params.paused ? "Play" : "Pause"
 	})
 
-	pane.addButton({ title: "Randomize" }).on("click", onRandomize)
+	pane.addButton({ title: "Reset" }).on("click", () => {
+		Object.assign(params, createLeniaParams())
+		pauseButton.title = params.paused ? "Play" : "Pause"
+		pane.refresh()
+		onReseed()
+	})
+
+	pane.addButton({ title: "Randomize" }).on("click", onReseed)
 
 	return {
 		dispose: () => {

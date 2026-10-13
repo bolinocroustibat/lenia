@@ -24,10 +24,10 @@ function start(): void {
 	const sim = new LeniaSimulation(gl)
 	let gridWidth = 0
 	let gridHeight = 0
+	let reseedRequested = false
 
 	const controls = mountControls(params, () => {
-		if (gridWidth === 0) return
-		sim.seed(params.radius)
+		reseedRequested = true
 	})
 
 	function syncGrid(): boolean {
@@ -49,6 +49,10 @@ function start(): void {
 
 	function render(stepSimulation: boolean): void {
 		if (!syncGrid()) return
+		if (reseedRequested) {
+			sim.seed(params.radius)
+			reseedRequested = false
+		}
 		if (stepSimulation && !params.paused) {
 			const steps = Math.max(1, Math.round(params.speed))
 			for (let step = 0; step < steps; step++) sim.step(params)
