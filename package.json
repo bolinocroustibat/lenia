@@ -1,0 +1,20 @@
+{
+	"name": "lenia",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "bunx --bun vite",
+		"build": "bunx --bun vite build",
+		"preview": "bunx --bun vite preview",
+		"check": "biome check --write ."
+	},
+	"dependencies": {
+		"tweakpane": "^4.0.5"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.15",
+		"typescript": "^5.9.3",
+		"vite": "^8.3.4"
+	}
+}
