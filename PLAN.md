@@ -45,3 +45,42 @@ Replace the random disks with Bert Chan's Orbium creature.
 No animal picker, no extra sliders, no FFT.
 
 After that, run the page: the pattern should persist and travel, instead of fading out within a second.
+
+## Later: Rust core, then WASM
+
+A standalone Rust version is a small port, and the browser version can be the same crate compiled to WASM. The rules already live in a few pure functions: the ring in [src/sim/kernel.ts](src/sim/kernel.ts), the seed in [src/sim/seed.ts](src/sim/seed.ts), and the update in the shader in [src/sim/glsl.ts](src/sim/glsl.ts).
+
+WebGL textures, ping-pong, and the panel do not move. A GPU rewrite (wgpu / WGSL) that matches today's shaders is a later project, not these steps.
+
+```mermaid
+flowchart LR
+  core[lenia-core]
+  native[native window]
+  wasm[wasm-bindgen]
+  canvas[2D canvas page]
+  webgl[existing WebGL sim]
+  core --> native
+  core --> wasm --> canvas
+```
+
+Direct convolution at R = 13 is fine on a fixed grid around 128×128 or 256×256. Full-window grids stay on the WebGL page.
+
+### Step 1 — library and tests
+
+Add `crates/lenia-core` with no window and no WASM. It owns:
+
+- Orbium params (μ = 0.15, σ = 0.015, dt = 0.1, R = 13, kernel peaks μ_K = 0.5, σ_K = 0.15)
+- `build_ring_kernel` and a toroidal seed, copied from the TypeScript
+- a double-buffered `Vec<f32>` and `step`
+
+Tests: weights sum to 1, values stay in `[0, 1]`, a 1-cell kernel matches a hand-computed step. `cargo test` is the whole milestone.
+
+### Step 2 — native window
+
+Add a binary in the same crate (or `crates/lenia`) that allocates one fixed grid, seeds it, and draws each step into a small window (`winit` + `softbuffer` is enough). Hardcoded Orbium params. Space toggles pause. No sliders.
+
+### Step 3 — same crate in the browser
+
+Build the library as a `cdylib` with `wasm-bindgen`: construct a grid, `step`, and borrow the field as a `Float32Array`. A second Vite page paints that buffer on a 2D canvas with the same color ramp as `DISPLAY_FRAG`. The WebGL app in [src/main.ts](src/main.ts) stays as it is.
+
+Vite already builds this repo, so the WASM bundle is an import on that second page, not a separate site.
