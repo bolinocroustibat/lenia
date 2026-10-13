@@ -1,3 +1,5 @@
+import { MAX_KERNEL_RADIUS } from "./kernel"
+
 export const QUAD_VERT = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -38,10 +40,12 @@ void main() {
 
 // A <- clip(A + dt * G(K * A), 0, 1)
 // G(u; μ, σ) = 2 exp(-(u - μ)^2 / (2 σ^2)) - 1
-// u_kernelReady stays 0 until convolve() returns the real potential, so the pass copies A.
+// K is the Orbium ring (μ_K = 0.5, σ_K = 0.15), uploaded as u_kernel.
+// The loop bound matches MAX_KERNEL_RADIUS. Neighbors wrap through the sampler.
 export const SIM_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_state;
+uniform sampler2D u_kernel;
 uniform vec2 u_texelSize;
 uniform float u_mu;
 uniform float u_sigma;
@@ -51,20 +55,26 @@ uniform float u_kernelReady;
 in vec2 v_uv;
 out vec4 out_color;
 
+const int MAX_R = ${MAX_KERNEL_RADIUS};
+
 float growth(float potential) {
 	float sigma = max(u_sigma, 1e-4);
 	float x = (potential - u_mu) / sigma;
 	return 2.0 * exp(-0.5 * x * x) - 1.0;
 }
 
-// Ring kernel of radius u_radius belongs here. Neighbors wrap.
-// The neighbor sample is only taken when R <= 0, which the panel does not allow,
-// so the potential is the center cell and every uniform stays linked.
 float convolve(vec2 uv) {
-	float center = texture(u_state, uv).r;
-	float neighbor = texture(u_state, fract(uv + u_texelSize)).r;
-	float useNeighbor = step(u_radius, 0.0);
-	return mix(center, neighbor, useNeighbor);
+	int radius = int(u_radius + 0.5);
+	float sum = 0.0;
+	for (int dy = -MAX_R; dy <= MAX_R; dy++) {
+		for (int dx = -MAX_R; dx <= MAX_R; dx++) {
+			if (abs(dx) > radius || abs(dy) > radius) continue;
+			float weight = texelFetch(u_kernel, ivec2(dx + radius, dy + radius), 0).r;
+			vec2 sampleUv = uv + vec2(float(dx), float(dy)) * u_texelSize;
+			sum += weight * texture(u_state, sampleUv).r;
+		}
+	}
+	return sum;
 }
 
 void main() {

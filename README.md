@@ -21,8 +21,6 @@ Tweakpane exposes μ, σ, dt, the kernel radius R, resolution, simulation speed,
 
 ## What is left
 
-Lenia's update is `clip(A + dt · G(K ∗ A), 0, 1)`, with G the Gaussian growth function of μ and σ. G and the Euler step are already in the simulation shader. `convolve` still returns the center cell, so the field is copied and does not move.
+The ring kernel is in place and `KERNEL_READY` is `1`, so each step runs the Orbium update. Random disks shrink and disappear under these parameters. They are not the stable Orbium creature.
 
-When the ring kernel is in place, set `KERNEL_READY` to `1` in `src/sim/lenia.ts`. The sliders are already uploaded as uniforms every step.
-
-The review and the next kernel step are in [PLAN.md](PLAN.md).
+A creature seed, and kernels larger than the fragment-loop cap of 16, are later work. The review is in [PLAN.md](PLAN.md).

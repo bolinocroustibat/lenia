@@ -8,13 +8,11 @@ import { FullscreenQuad } from "../gl/quad"
 import { createProgram, uniform } from "../gl/shaders"
 import type { LeniaParams } from "../params"
 import { COPY_FRAG, DISPLAY_FRAG, QUAD_VERT, SIM_FRAG } from "./glsl"
+import { buildRingKernel, clampKernelRadius } from "./kernel"
 import { seedField } from "./seed"
 
-/**
- * Flip to 1 when `convolve` in the simulation shader returns the ring-kernel potential.
- * While it stays 0, each step copies the field so the ping-pong path can be checked.
- */
-export const KERNEL_READY = 0
+/** The simulation shader convolves with the ring kernel. 0 would copy the field. */
+export const KERNEL_READY = 1
 
 export interface GridSize {
 	width: number
@@ -36,6 +34,7 @@ export function gridSizeForCanvas(
 
 interface SimUniforms {
 	state: WebGLUniformLocation
+	kernel: WebGLUniformLocation
 	texelSize: WebGLUniformLocation
 	mu: WebGLUniformLocation
 	sigma: WebGLUniformLocation
@@ -56,6 +55,8 @@ export class LeniaSimulation {
 	private readonly simUniforms: SimUniforms
 	private readonly displayState: WebGLUniformLocation
 	private readonly copyState: WebGLUniformLocation
+	private kernelTexture: WebGLTexture | undefined
+	private kernelRadius = -1
 
 	constructor(private readonly gl: WebGL2RenderingContext) {
 		this.quad = new FullscreenQuad(gl)
@@ -65,6 +66,7 @@ export class LeniaSimulation {
 		this.copyProgram = createProgram(gl, QUAD_VERT, COPY_FRAG)
 		this.simUniforms = {
 			state: uniform(gl, this.simProgram, "u_state"),
+			kernel: uniform(gl, this.simProgram, "u_kernel"),
 			texelSize: uniform(gl, this.simProgram, "u_texelSize"),
 			mu: uniform(gl, this.simProgram, "u_mu"),
 			sigma: uniform(gl, this.simProgram, "u_sigma"),
@@ -106,8 +108,11 @@ export class LeniaSimulation {
 		gl.bindFramebuffer(gl.FRAMEBUFFER, targets.writeFramebuffer)
 		gl.viewport(0, 0, this.gridWidth, this.gridHeight)
 		gl.useProgram(this.simProgram)
+		const radius = this.syncKernel(params.radius)
 		bindField(gl, 0, targets.readTexture, this.samplers.nearest)
+		bindField(gl, 1, this.kernelField(), this.samplers.nearest)
 		gl.uniform1i(this.simUniforms.state, 0)
+		gl.uniform1i(this.simUniforms.kernel, 1)
 		gl.uniform2f(
 			this.simUniforms.texelSize,
 			1 / this.gridWidth,
@@ -116,10 +121,7 @@ export class LeniaSimulation {
 		gl.uniform1f(this.simUniforms.mu, params.mu)
 		gl.uniform1f(this.simUniforms.sigma, Math.max(params.sigma, 0.001))
 		gl.uniform1f(this.simUniforms.dt, params.dt)
-		gl.uniform1f(
-			this.simUniforms.radius,
-			Math.max(1, Math.round(params.radius)),
-		)
+		gl.uniform1f(this.simUniforms.radius, radius)
 		gl.uniform1f(this.simUniforms.kernelReady, KERNEL_READY)
 		this.quad.draw(this.simProgram)
 		targets.swap()
@@ -141,7 +143,9 @@ export class LeniaSimulation {
 		const gl = this.gl
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 		gl.bindSampler(0, null)
+		gl.bindSampler(1, null)
 		this.targets?.dispose()
+		if (this.kernelTexture) gl.deleteTexture(this.kernelTexture)
 		this.quad.dispose()
 		gl.deleteSampler(this.samplers.nearest)
 		gl.deleteSampler(this.samplers.linear)
@@ -164,5 +168,44 @@ export class LeniaSimulation {
 	private field(): PingPong {
 		if (!this.targets) throw new Error("Grid is not allocated")
 		return this.targets
+	}
+
+	/** Rebuild the ring texture only when the integer radius changes. */
+	private syncKernel(radius: number): number {
+		const next = clampKernelRadius(radius)
+		if (this.kernelTexture && next === this.kernelRadius) return next
+		const gl = this.gl
+		const weights = buildRingKernel(next)
+		const size = next * 2 + 1
+		if (!this.kernelTexture) {
+			const texture = gl.createTexture()
+			if (!texture) throw new Error("Could not create kernel texture")
+			this.kernelTexture = texture
+		}
+		gl.bindTexture(gl.TEXTURE_2D, this.kernelTexture)
+		gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.R32F,
+			size,
+			size,
+			0,
+			gl.RED,
+			gl.FLOAT,
+			weights,
+		)
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+		gl.bindTexture(gl.TEXTURE_2D, null)
+		this.kernelRadius = next
+		return next
+	}
+
+	private kernelField(): WebGLTexture {
+		if (!this.kernelTexture) throw new Error("Kernel is not allocated")
+		return this.kernelTexture
 	}
 }

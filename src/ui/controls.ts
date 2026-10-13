@@ -1,5 +1,6 @@
 import { Pane } from "tweakpane"
 import type { LeniaParams } from "../params"
+import { MAX_KERNEL_RADIUS } from "../sim/kernel"
 
 export interface LeniaControls {
 	dispose: () => void
@@ -32,7 +33,7 @@ export function mountControls(
 	pane.addBinding(params, "radius", {
 		label: "R",
 		min: 1,
-		max: 64,
+		max: MAX_KERNEL_RADIUS,
 		step: 1,
 	})
 	pane.addBinding(params, "resolution", {
