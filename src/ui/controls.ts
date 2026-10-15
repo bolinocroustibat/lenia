@@ -8,7 +8,9 @@ export interface LeniaControls {
 
 export function mountControls(
 	params: LeniaParams,
+	onClear: () => void,
 	onReseed: () => void,
+	onAddOrbium: () => void,
 ): LeniaControls {
 	const pane = new Pane({ title: "Lenia", expanded: true })
 
@@ -57,9 +59,11 @@ export function mountControls(
 		pauseButton.title = params.paused ? "Play" : "Pause"
 	})
 
-	pane.addButton({ title: "Reset" }).on("click", onReseed)
+	pane.addButton({ title: "Reset" }).on("click", onClear)
 
 	pane.addButton({ title: "Randomize" }).on("click", onReseed)
+
+	pane.addButton({ title: "Add Orbium" }).on("click", onAddOrbium)
 
 	return {
 		dispose: () => {

@@ -24,11 +24,22 @@ function start(): void {
 	const sim = new LeniaSimulation(gl)
 	let gridWidth = 0
 	let gridHeight = 0
+	let clearRequested = false
 	let reseedRequested = false
+	let addOrbiumRequested = false
 
-	const controls = mountControls(params, () => {
-		reseedRequested = true
-	})
+	const controls = mountControls(
+		params,
+		() => {
+			clearRequested = true
+		},
+		() => {
+			reseedRequested = true
+		},
+		() => {
+			addOrbiumRequested = true
+		},
+	)
 
 	function syncGrid(): boolean {
 		resizeCanvasToDisplay(canvas)
@@ -49,9 +60,17 @@ function start(): void {
 
 	function render(stepSimulation: boolean): void {
 		if (!syncGrid()) return
+		if (clearRequested) {
+			sim.clear()
+			clearRequested = false
+		}
 		if (reseedRequested) {
 			sim.seed()
 			reseedRequested = false
+		}
+		if (addOrbiumRequested) {
+			sim.addOrbium()
+			addOrbiumRequested = false
 		}
 		if (stepSimulation && !params.paused) {
 			const steps = Math.max(1, Math.round(params.speed))

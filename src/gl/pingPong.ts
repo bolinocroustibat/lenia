@@ -58,6 +58,16 @@ export class PingPong {
 		gl.bindTexture(gl.TEXTURE_2D, null)
 	}
 
+	/** Copy the current field back to the CPU. Row 0 matches the uploaded layout. */
+	download(): Float32Array {
+		const gl = this.gl
+		const pixels = new Float32Array(this.width * this.height)
+		gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[this.readIndex])
+		gl.readPixels(0, 0, this.width, this.height, gl.RED, gl.FLOAT, pixels)
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+		return pixels
+	}
+
 	dispose(): void {
 		const gl = this.gl
 		for (const texture of this.textures) gl.deleteTexture(texture)

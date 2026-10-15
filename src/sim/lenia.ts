@@ -9,7 +9,7 @@ import { createProgram, uniform } from "../gl/shaders"
 import type { LeniaParams } from "../params"
 import { COPY_FRAG, DISPLAY_FRAG, QUAD_VERT, SIM_FRAG } from "./glsl"
 import { buildRingKernel, clampKernelRadius } from "./kernel"
-import { seedField } from "./seed"
+import { seedField, stampOrbium } from "./seed"
 
 /** The simulation shader convolves with the ring kernel. 0 would copy the field. */
 export const KERNEL_READY = 1
@@ -99,6 +99,18 @@ export class LeniaSimulation {
 
 	seed(): void {
 		this.field().upload(seedField(this.gridWidth, this.gridHeight))
+	}
+
+	clear(): void {
+		this.field().upload(new Float32Array(this.gridWidth * this.gridHeight))
+	}
+
+	/** Stamp one Orbium onto the current field without clearing it. */
+	addOrbium(): void {
+		const targets = this.field()
+		const field = targets.download()
+		stampOrbium(field, this.gridWidth, this.gridHeight)
+		targets.upload(field)
 	}
 
 	/** Read one texture, write the other, then swap. */
