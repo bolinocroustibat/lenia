@@ -8,7 +8,7 @@ Lenia's update is:
 
 The panel values (μ = 0.15, σ = 0.015, dt = 0.1, R = 13) are Orbium's growth parameters from Bert Chan's Lenia. The ring is a Gaussian shell with μ_K = 0.5 and σ_K = 0.15, built on the CPU, normalized so the weights sum to 1, and uploaded as a small `R32F` texture. The R slider stops at 16, which is the fragment loop's bound.
 
-Random disks in [src/sim/seed.ts](src/sim/seed.ts) shrink and disappear under these parameters. They are not the stable creature.
+[src/sim/seed.ts](src/sim/seed.ts) stamps one copy of Bert Chan's Orbium unicaudatus. Randomize moves that copy. The patch stays at its native size for R = 13.
 
 ```mermaid
 flowchart LR
@@ -36,15 +36,9 @@ What to leave alone for this step:
 
 ## Next small step
 
-Replace the random disks with Bert Chan's Orbium creature.
+The Orbium patch is in place: one copy on the torus, moved by Randomize, at its native size for R = 13.
 
-1. Stamp the published Orbium cell patch into the field in [src/sim/seed.ts](src/sim/seed.ts). It is one fixed array of values in `[0, 1]`, the pattern that glides at R = 13 with the current μ, σ, and dt.
-2. Place one copy on the torus. Randomize moves that copy. Do not go back to smooth disks.
-3. Keep the patch at its native size for R = 13. Do not scale it when the radius slider moves.
-
-No animal picker, no extra sliders, no FFT.
-
-After that, run the page: the pattern should persist and travel, instead of fading out within a second.
+The following work is the Rust core below.
 
 ## Later: Rust core, then WASM
 

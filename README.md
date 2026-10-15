@@ -21,6 +21,6 @@ Tweakpane exposes μ, σ, dt, the kernel radius R, resolution, simulation speed,
 
 ## What is left
 
-The ring kernel is in place and `KERNEL_READY` is `1`, so each step runs the Orbium update. Random disks shrink and disappear under these parameters. They are not the stable Orbium creature.
+The ring kernel is in place and the field starts as one Orbium creature. It keeps its published size, and Randomize moves that copy.
 
-A creature seed, and kernels larger than the fragment-loop cap of 16, are later work. The review is in [PLAN.md](PLAN.md).
+Kernels larger than the fragment-loop cap of 16 are later work. The review is in [PLAN.md](PLAN.md).

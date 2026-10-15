@@ -41,7 +41,7 @@ function start(): void {
 		if (next.width === gridWidth && next.height === gridHeight) return true
 		const first = gridWidth === 0
 		sim.resize(next.width, next.height)
-		if (first) sim.seed(params.radius)
+		if (first) sim.seed()
 		gridWidth = next.width
 		gridHeight = next.height
 		return true
@@ -50,7 +50,7 @@ function start(): void {
 	function render(stepSimulation: boolean): void {
 		if (!syncGrid()) return
 		if (reseedRequested) {
-			sim.seed(params.radius)
+			sim.seed()
 			reseedRequested = false
 		}
 		if (stepSimulation && !params.paused) {

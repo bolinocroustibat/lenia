@@ -97,8 +97,8 @@ export class LeniaSimulation {
 		this.gridHeight = height
 	}
 
-	seed(radius: number): void {
-		this.field().upload(seedField(this.gridWidth, this.gridHeight, radius))
+	seed(): void {
+		this.field().upload(seedField(this.gridWidth, this.gridHeight))
 	}
 
 	/** Read one texture, write the other, then swap. */
