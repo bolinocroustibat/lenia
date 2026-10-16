@@ -4,6 +4,7 @@ import {
 	applyCreatureRule,
 	CIRCIUM,
 	type Creature,
+	HEXAPTERYX,
 	ORBIUM,
 } from "../sim/creature"
 import { MAX_KERNEL_RADIUS } from "../sim/kernel"
@@ -92,6 +93,11 @@ export function mountControls(
 	sharedRule.addButton({ title: "Add Circium ventilans" }).on("click", () => {
 		place(CIRCIUM)
 	})
+	sharedRule
+		.addButton({ title: "Add Hexapteryx arcus labens" })
+		.on("click", () => {
+			place(HEXAPTERYX)
+		})
 
 	return {
 		dispose: () => {

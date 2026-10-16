@@ -7,18 +7,26 @@ export function stampCreature(
 	height: number,
 	creature: Creature,
 ): void {
-	const size = creature.cells.length
+	const patternHeight = creature.cells.length
+	const patternWidth = creature.cells[0]?.length ?? 0
 	const originX = Math.floor(Math.random() * width)
 	const originY = Math.floor(Math.random() * height)
 	const rotation = Math.floor(Math.random() * 4)
 	const flip = Math.random() < 0.5
 
-	for (let y = 0; y < size; y++) {
+	for (let y = 0; y < patternHeight; y++) {
 		const row = creature.cells[y]
 		for (let x = 0; x < row.length; x++) {
 			const level = row[x]
 			if (level === 0) continue
-			const [offsetX, offsetY] = orient(x, y, size, rotation, flip)
+			const [offsetX, offsetY] = orient(
+				x,
+				y,
+				patternWidth,
+				patternHeight,
+				rotation,
+				flip,
+			)
 			const fieldX = (originX + offsetX) % width
 			const fieldY = (originY + offsetY) % height
 			field[fieldY * width + fieldX] = level / 255
@@ -30,17 +38,23 @@ export function stampCreature(
 function orient(
 	x: number,
 	y: number,
-	size: number,
+	patternWidth: number,
+	patternHeight: number,
 	rotation: number,
 	flip: boolean,
 ): [number, number] {
-	let sx = flip ? size - 1 - x : x
+	let width = patternWidth
+	let height = patternHeight
+	let sx = flip ? width - 1 - x : x
 	let sy = y
 	for (let turn = 0; turn < rotation; turn++) {
-		const nextX = size - 1 - sy
+		const nextX = height - 1 - sy
 		const nextY = sx
 		sx = nextX
 		sy = nextY
+		const nextWidth = height
+		height = width
+		width = nextWidth
 	}
 	return [sx, sy]
 }
