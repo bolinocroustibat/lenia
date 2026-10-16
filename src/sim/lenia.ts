@@ -7,9 +7,10 @@ import {
 import { FullscreenQuad } from "../gl/quad"
 import { createProgram, uniform } from "../gl/shaders"
 import type { LeniaParams } from "../params"
+import { type Creature, ORBIUM } from "./creature"
 import { COPY_FRAG, DISPLAY_FRAG, QUAD_VERT, SIM_FRAG } from "./glsl"
 import { buildRingKernel, clampKernelRadius } from "./kernel"
-import { seedField, stampOrbium } from "./seed"
+import { seedField, stampCreature } from "./seed"
 
 /** The simulation shader convolves with the ring kernel. 0 would copy the field. */
 export const KERNEL_READY = 1
@@ -57,6 +58,8 @@ export class LeniaSimulation {
 	private readonly copyState: WebGLUniformLocation
 	private kernelTexture: WebGLTexture | undefined
 	private kernelRadius = -1
+	private kernelMu = Number.NaN
+	private kernelSigma = Number.NaN
 
 	constructor(private readonly gl: WebGL2RenderingContext) {
 		this.quad = new FullscreenQuad(gl)
@@ -97,19 +100,19 @@ export class LeniaSimulation {
 		this.gridHeight = height
 	}
 
-	seed(): void {
-		this.field().upload(seedField(this.gridWidth, this.gridHeight))
+	seed(creature: Creature = ORBIUM): void {
+		this.field().upload(seedField(this.gridWidth, this.gridHeight, creature))
 	}
 
 	clear(): void {
 		this.field().upload(new Float32Array(this.gridWidth * this.gridHeight))
 	}
 
-	/** Stamp one Orbium onto the current field without clearing it. */
-	addOrbium(): void {
+	/** Stamp one creature onto the current field without clearing it. */
+	addCreature(creature: Creature): void {
 		const targets = this.field()
 		const field = targets.download()
-		stampOrbium(field, this.gridWidth, this.gridHeight)
+		stampCreature(field, this.gridWidth, this.gridHeight, creature)
 		targets.upload(field)
 	}
 
@@ -120,7 +123,7 @@ export class LeniaSimulation {
 		gl.bindFramebuffer(gl.FRAMEBUFFER, targets.writeFramebuffer)
 		gl.viewport(0, 0, this.gridWidth, this.gridHeight)
 		gl.useProgram(this.simProgram)
-		const radius = this.syncKernel(params.radius)
+		const radius = this.syncKernel(params)
 		bindField(gl, 0, targets.readTexture, this.samplers.nearest)
 		bindField(gl, 1, this.kernelField(), this.samplers.nearest)
 		gl.uniform1i(this.simUniforms.state, 0)
@@ -182,12 +185,19 @@ export class LeniaSimulation {
 		return this.targets
 	}
 
-	/** Rebuild the ring texture only when the integer radius changes. */
-	private syncKernel(radius: number): number {
-		const next = clampKernelRadius(radius)
-		if (this.kernelTexture && next === this.kernelRadius) return next
+	/** Rebuild the ring texture when the radius or the ring peaks change. */
+	private syncKernel(params: LeniaParams): number {
+		const next = clampKernelRadius(params.radius)
+		if (
+			this.kernelTexture &&
+			next === this.kernelRadius &&
+			params.kernelMu === this.kernelMu &&
+			params.kernelSigma === this.kernelSigma
+		) {
+			return next
+		}
 		const gl = this.gl
-		const weights = buildRingKernel(next)
+		const weights = buildRingKernel(next, params.kernelMu, params.kernelSigma)
 		const size = next * 2 + 1
 		if (!this.kernelTexture) {
 			const texture = gl.createTexture()
@@ -213,6 +223,8 @@ export class LeniaSimulation {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 		gl.bindTexture(gl.TEXTURE_2D, null)
 		this.kernelRadius = next
+		this.kernelMu = params.kernelMu
+		this.kernelSigma = params.kernelSigma
 		return next
 	}
 

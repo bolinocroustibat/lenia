@@ -5,6 +5,7 @@ import {
 	showError,
 } from "./gl/context"
 import { createLeniaParams } from "./params"
+import { ORBIUM } from "./sim/creature"
 import { gridSizeForCanvas, LeniaSimulation } from "./sim/lenia"
 import { mountControls } from "./ui/controls"
 
@@ -69,7 +70,7 @@ function start(): void {
 			reseedRequested = false
 		}
 		if (addOrbiumRequested) {
-			sim.addOrbium()
+			sim.addCreature(ORBIUM)
 			addOrbiumRequested = false
 		}
 		if (stepSimulation && !params.paused) {

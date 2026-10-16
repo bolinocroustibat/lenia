@@ -40,7 +40,7 @@ void main() {
 
 // A <- clip(A + dt * G(K * A), 0, 1)
 // G(u; μ, σ) = 2 exp(-(u - μ)^2 / (2 σ^2)) - 1
-// K is the Orbium ring (μ_K = 0.5, σ_K = 0.15), uploaded as u_kernel.
+// K is the active creature's ring, uploaded as u_kernel.
 // The loop bound matches MAX_KERNEL_RADIUS. Neighbors wrap through the sampler.
 export const SIM_FRAG = `#version 300 es
 precision highp float;

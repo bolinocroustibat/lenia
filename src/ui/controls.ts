@@ -1,5 +1,6 @@
 import { Pane } from "tweakpane"
 import type { LeniaParams } from "../params"
+import { applyCreatureRule, ORBIUM } from "../sim/creature"
 import { MAX_KERNEL_RADIUS } from "../sim/kernel"
 
 export interface LeniaControls {
@@ -61,9 +62,17 @@ export function mountControls(
 
 	pane.addButton({ title: "Reset" }).on("click", onClear)
 
-	pane.addButton({ title: "Randomize" }).on("click", onReseed)
+	pane.addButton({ title: "Randomize" }).on("click", () => {
+		applyCreatureRule(params, ORBIUM)
+		pane.refresh()
+		onReseed()
+	})
 
-	pane.addButton({ title: "Add Orbium" }).on("click", onAddOrbium)
+	pane.addButton({ title: "Add Orbium" }).on("click", () => {
+		applyCreatureRule(params, ORBIUM)
+		pane.refresh()
+		onAddOrbium()
+	})
 
 	return {
 		dispose: () => {
