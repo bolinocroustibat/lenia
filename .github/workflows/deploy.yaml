@@ -88,12 +88,12 @@ jobs:
           # The server allows this restart without a password. reload is not in that list, so sudo asks for a password and the job fails.
           script: sudo systemctl restart nginx.service
 
-      - name: Create Sentry "${{ github.ref_name }}" release
-        uses: getsentry/action-release@v3
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: "adrien-carpentier"
-          SENTRY_PROJECT: "lenia"
-        with:
-          environment: production
-          release: ${{ github.ref_name }}
+      # - name: Create Sentry "${{ github.ref_name }}" release
+      #   uses: getsentry/action-release@v3
+      #   env:
+      #     SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      #     SENTRY_ORG: "adrien-carpentier"
+      #     SENTRY_PROJECT: "lenia"
+      #   with:
+      #     environment: production
+      #     release: ${{ github.ref_name }}
