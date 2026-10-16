@@ -4,8 +4,13 @@ import {
 	applyCreatureRule,
 	CIRCIUM,
 	type Creature,
+	DECAPTERYX,
+	HEPTAPTERYX,
 	HEXAPTERYX,
+	NONAPTERYX,
+	OCTAPTERYX,
 	ORBIUM,
+	TETRACOSAPTERYX,
 } from "../sim/creature"
 import { MAX_KERNEL_RADIUS } from "../sim/kernel"
 
@@ -90,14 +95,19 @@ export function mountControls(
 		title: `Rule μ ${CIRCIUM.rule.mu}, σ ${CIRCIUM.rule.sigma}`,
 		expanded: true,
 	})
-	sharedRule.addButton({ title: "Add Circium ventilans" }).on("click", () => {
-		place(CIRCIUM)
-	})
-	sharedRule
-		.addButton({ title: "Add Hexapteryx arcus labens" })
-		.on("click", () => {
-			place(HEXAPTERYX)
+	for (const creature of [
+		CIRCIUM,
+		HEXAPTERYX,
+		HEPTAPTERYX,
+		OCTAPTERYX,
+		NONAPTERYX,
+		DECAPTERYX,
+		TETRACOSAPTERYX,
+	]) {
+		sharedRule.addButton({ title: `Add ${creature.name}` }).on("click", () => {
+			place(creature)
 		})
+	}
 
 	return {
 		dispose: () => {
