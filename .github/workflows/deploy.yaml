@@ -1,0 +1,99 @@
+name: Deploy to prod when tag
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+
+  bump-version:
+    name: Bump version to ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Bump version in package.json to ${{ github.ref_name }}
+        run: sed -E -i 's/"version":[[:space:]]"[0-9]+.[0-9]+.[0-9]+"/"version":\ "${{ github.ref_name }}"/g' ./package.json
+
+      - name: Commit and push updated package.json
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: main
+          commit_message: "chore: bump version to ${{ github.ref_name }}"
+          commit_user_name: Adrien Carpentier
+          commit_user_email: me@adriencarpentier.com
+          commit_author: Adrien Carpentier <me@adriencarpentier.com>
+
+
+  build-and-deploy:
+    name: Deploy ${{ github.ref_name }} to prod
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      VITE_ENVIRONMENT: "production"
+    needs: bump-version
+    steps:
+
+      - name: Checkout main after bump
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies with Bun
+        run: bun install --frozen-lockfile
+
+      - name: Build for production with Bun and Vite
+        shell: bash
+        run: bun run build
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy build to server with rsync
+        run: rsync -avz --exclude '.git' --chown=github:www-data --chmod=Dg=rwx,Fg=rwx ./dist/* ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SERVER_PATH_PROD }} # We set directory (D) and files (F) permission for group www-data to rwx so that the same users can overwrite later
+
+      - name: Relaunch nginx on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # The server allows this restart without a password. reload is not in that list, so sudo asks for a password and the job fails.
+          script: sudo systemctl restart nginx.service
+
+      - name: Create Sentry "${{ github.ref_name }}" release
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: "adrien-carpentier"
+          SENTRY_PROJECT: "lenia"
+        with:
+          environment: production
+          release: ${{ github.ref_name }}
