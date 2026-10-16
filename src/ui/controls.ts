@@ -10,30 +10,34 @@ export interface LeniaControls {
 export function mountControls(
 	params: LeniaParams,
 	onClear: () => void,
-	onReseed: () => void,
+	onRandomize: () => void,
 	onAddOrbium: () => void,
 ): LeniaControls {
 	const pane = new Pane({ title: "Lenia", expanded: true })
 
-	pane.addBinding(params, "mu", {
+	const rules = pane.addFolder({
+		title: "Advanced",
+		expanded: false,
+	})
+	rules.addBinding(params, "mu", {
 		label: "How full neighbors should be (μ)",
 		min: 0,
 		max: 1,
 		step: 0.001,
 	})
-	pane.addBinding(params, "sigma", {
+	rules.addBinding(params, "sigma", {
 		label: "How wide that target is (σ)",
 		min: 0.001,
 		max: 0.5,
 		step: 0.001,
 	})
-	pane.addBinding(params, "dt", {
+	rules.addBinding(params, "dt", {
 		label: "How much each step changes (dt)",
 		min: 0,
 		max: 1,
 		step: 0.01,
 	})
-	pane.addBinding(params, "radius", {
+	rules.addBinding(params, "radius", {
 		label: "How far cells look (R)",
 		min: 1,
 		max: MAX_KERNEL_RADIUS,
@@ -60,13 +64,9 @@ export function mountControls(
 		pauseButton.title = params.paused ? "Play" : "Pause"
 	})
 
-	pane.addButton({ title: "Reset" }).on("click", onClear)
+	pane.addButton({ title: "Reset to empty" }).on("click", onClear)
 
-	pane.addButton({ title: "Randomize" }).on("click", () => {
-		applyCreatureRule(params, ORBIUM)
-		pane.refresh()
-		onReseed()
-	})
+	pane.addButton({ title: "Reset to random cells" }).on("click", onRandomize)
 
 	pane.addButton({ title: "Add Orbium" }).on("click", () => {
 		applyCreatureRule(params, ORBIUM)

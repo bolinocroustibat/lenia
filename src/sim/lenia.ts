@@ -108,6 +108,13 @@ export class LeniaSimulation {
 		this.field().upload(new Float32Array(this.gridWidth * this.gridHeight))
 	}
 
+	/** Replace the field with a random value in each cell. */
+	randomize(): void {
+		const field = new Float32Array(this.gridWidth * this.gridHeight)
+		for (let i = 0; i < field.length; i++) field[i] = Math.random()
+		this.field().upload(field)
+	}
+
 	/** Stamp one creature onto the current field without clearing it. */
 	addCreature(creature: Creature): void {
 		const targets = this.field()

@@ -26,7 +26,7 @@ function start(): void {
 	let gridWidth = 0
 	let gridHeight = 0
 	let clearRequested = false
-	let reseedRequested = false
+	let randomizeRequested = false
 	let addOrbiumRequested = false
 
 	const controls = mountControls(
@@ -35,7 +35,7 @@ function start(): void {
 			clearRequested = true
 		},
 		() => {
-			reseedRequested = true
+			randomizeRequested = true
 		},
 		() => {
 			addOrbiumRequested = true
@@ -65,9 +65,9 @@ function start(): void {
 			sim.clear()
 			clearRequested = false
 		}
-		if (reseedRequested) {
-			sim.seed()
-			reseedRequested = false
+		if (randomizeRequested) {
+			sim.randomize()
+			randomizeRequested = false
 		}
 		if (addOrbiumRequested) {
 			sim.addCreature(ORBIUM)
