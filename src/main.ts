@@ -5,7 +5,7 @@ import {
 	showError,
 } from "./gl/context"
 import { createLeniaParams } from "./params"
-import { ORBIUM } from "./sim/creature"
+import type { Creature } from "./sim/creature"
 import { gridSizeForCanvas, LeniaSimulation } from "./sim/lenia"
 import { mountControls } from "./ui/controls"
 
@@ -27,7 +27,7 @@ function start(): void {
 	let gridHeight = 0
 	let clearRequested = false
 	let randomizeRequested = false
-	let addOrbiumRequested = false
+	let creatureToAdd: Creature | undefined
 
 	const controls = mountControls(
 		params,
@@ -37,8 +37,8 @@ function start(): void {
 		() => {
 			randomizeRequested = true
 		},
-		() => {
-			addOrbiumRequested = true
+		(creature) => {
+			creatureToAdd = creature
 		},
 	)
 
@@ -69,9 +69,9 @@ function start(): void {
 			sim.randomize()
 			randomizeRequested = false
 		}
-		if (addOrbiumRequested) {
-			sim.addCreature(ORBIUM)
-			addOrbiumRequested = false
+		if (creatureToAdd) {
+			sim.addCreature(creatureToAdd)
+			creatureToAdd = undefined
 		}
 		if (stepSimulation && !params.paused) {
 			const steps = Math.max(1, Math.round(params.speed))

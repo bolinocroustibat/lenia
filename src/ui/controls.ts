@@ -1,6 +1,11 @@
 import { Pane } from "tweakpane"
 import type { LeniaParams } from "../params"
-import { applyCreatureRule, ORBIUM } from "../sim/creature"
+import {
+	applyCreatureRule,
+	CIRCIUM,
+	type Creature,
+	ORBIUM,
+} from "../sim/creature"
 import { MAX_KERNEL_RADIUS } from "../sim/kernel"
 
 export interface LeniaControls {
@@ -11,7 +16,7 @@ export function mountControls(
 	params: LeniaParams,
 	onClear: () => void,
 	onRandomize: () => void,
-	onAddOrbium: () => void,
+	onAddCreature: (creature: Creature) => void,
 ): LeniaControls {
 	const pane = new Pane({ title: "Lenia", expanded: true })
 
@@ -45,7 +50,7 @@ export function mountControls(
 	})
 	pane.addBinding(params, "resolution", {
 		label: "Resolution",
-		min: 2,
+		min: 1,
 		max: 16,
 		step: 1,
 	})
@@ -68,10 +73,24 @@ export function mountControls(
 
 	pane.addButton({ title: "Reset to random cells" }).on("click", onRandomize)
 
-	pane.addButton({ title: "Add Orbium" }).on("click", () => {
-		applyCreatureRule(params, ORBIUM)
+	const place = (creature: Creature) => {
+		applyCreatureRule(params, creature)
 		pane.refresh()
-		onAddOrbium()
+		onAddCreature(creature)
+	}
+
+	const orbiumRule = pane.addFolder({
+		title: `Rule μ ${ORBIUM.rule.mu}, σ ${ORBIUM.rule.sigma}`,
+		expanded: true,
+	})
+	orbiumRule.addButton({ title: "Add Orbium" }).on("click", () => place(ORBIUM))
+
+	const sharedRule = pane.addFolder({
+		title: `Rule μ ${CIRCIUM.rule.mu}, σ ${CIRCIUM.rule.sigma}`,
+		expanded: true,
+	})
+	sharedRule.addButton({ title: "Add Circium ventilans" }).on("click", () => {
+		place(CIRCIUM)
 	})
 
 	return {
