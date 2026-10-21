@@ -9,7 +9,7 @@ import { createProgram, uniform } from "../gl/shaders"
 import type { LeniaParams } from "../params"
 import { type Creature, ORBIUM } from "./creature"
 import { COPY_FRAG, DISPLAY_FRAG, QUAD_VERT, SIM_FRAG } from "./glsl"
-import { buildRingKernel, clampKernelRadius } from "./kernel"
+import { clampKernelRadius, kernelCacheKey, kernelWeights } from "./kernel"
 import { seedField, stampCreature } from "./seed"
 
 /** The simulation shader convolves with the ring kernel. 0 would copy the field. */
@@ -42,6 +42,7 @@ interface SimUniforms {
 	dt: WebGLUniformLocation
 	radius: WebGLUniformLocation
 	kernelReady: WebGLUniformLocation
+	polynomialGrowth: WebGLUniformLocation
 }
 
 export class LeniaSimulation {
@@ -57,9 +58,7 @@ export class LeniaSimulation {
 	private readonly displayState: WebGLUniformLocation
 	private readonly copyState: WebGLUniformLocation
 	private kernelTexture: WebGLTexture | undefined
-	private kernelRadius = -1
-	private kernelMu = Number.NaN
-	private kernelSigma = Number.NaN
+	private kernelKey = ""
 
 	constructor(private readonly gl: WebGL2RenderingContext) {
 		this.quad = new FullscreenQuad(gl)
@@ -76,6 +75,7 @@ export class LeniaSimulation {
 			dt: uniform(gl, this.simProgram, "u_dt"),
 			radius: uniform(gl, this.simProgram, "u_radius"),
 			kernelReady: uniform(gl, this.simProgram, "u_kernelReady"),
+			polynomialGrowth: uniform(gl, this.simProgram, "u_polynomialGrowth"),
 		}
 		this.displayState = uniform(gl, this.displayProgram, "u_state")
 		this.copyState = uniform(gl, this.copyProgram, "u_state")
@@ -145,6 +145,10 @@ export class LeniaSimulation {
 		gl.uniform1f(this.simUniforms.dt, params.dt)
 		gl.uniform1f(this.simUniforms.radius, radius)
 		gl.uniform1f(this.simUniforms.kernelReady, KERNEL_READY)
+		gl.uniform1f(
+			this.simUniforms.polynomialGrowth,
+			params.growth === "polynomial" ? 1 : 0,
+		)
 		this.quad.draw(this.simProgram)
 		targets.swap()
 	}
@@ -192,19 +196,13 @@ export class LeniaSimulation {
 		return this.targets
 	}
 
-	/** Rebuild the ring texture when the radius or the ring peaks change. */
+	/** Rebuild the kernel texture when the radius or the ring peaks change. */
 	private syncKernel(params: LeniaParams): number {
 		const next = clampKernelRadius(params.radius)
-		if (
-			this.kernelTexture &&
-			next === this.kernelRadius &&
-			params.kernelMu === this.kernelMu &&
-			params.kernelSigma === this.kernelSigma
-		) {
-			return next
-		}
+		const key = kernelCacheKey(next, params.kernel)
+		if (this.kernelTexture && key === this.kernelKey) return next
 		const gl = this.gl
-		const weights = buildRingKernel(next, params.kernelMu, params.kernelSigma)
+		const weights = kernelWeights(next, params.kernel)
 		const size = next * 2 + 1
 		if (!this.kernelTexture) {
 			const texture = gl.createTexture()
@@ -229,9 +227,7 @@ export class LeniaSimulation {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 		gl.bindTexture(gl.TEXTURE_2D, null)
-		this.kernelRadius = next
-		this.kernelMu = params.kernelMu
-		this.kernelSigma = params.kernelSigma
+		this.kernelKey = key
 		return next
 	}
 

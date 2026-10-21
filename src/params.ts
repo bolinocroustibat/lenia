@@ -1,4 +1,5 @@
 import { ORBIUM } from "./sim/creature"
+import type { GrowthKind, KernelSpec } from "./sim/kernel"
 
 /** Live rule. A creature's context fills the growth and kernel numbers. */
 export interface LeniaParams {
@@ -6,10 +7,8 @@ export interface LeniaParams {
 	sigma: number
 	dt: number
 	radius: number
-	/** Ring peak, in units of the kernel radius. */
-	kernelMu: number
-	/** Ring width, in units of the kernel radius. */
-	kernelSigma: number
+	growth: GrowthKind
+	kernel: KernelSpec
 	/** CSS pixels covered by one cell. The field is stretched to fill the canvas. */
 	resolution: number
 	speed: number
@@ -23,8 +22,8 @@ export function createLeniaParams(): LeniaParams {
 		sigma: ORBIUM.rule.sigma,
 		dt: ORBIUM.rule.dt,
 		radius: ORBIUM.rule.radius,
-		kernelMu: ORBIUM.rule.kernelMu,
-		kernelSigma: ORBIUM.rule.kernelSigma,
+		growth: ORBIUM.rule.growth,
+		kernel: ORBIUM.rule.kernel,
 		resolution: 4,
 		speed: 1,
 		paused: true,

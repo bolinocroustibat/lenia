@@ -39,8 +39,9 @@ void main() {
 `
 
 // A <- clip(A + dt * G(K * A), 0, 1)
-// G(u; μ, σ) = 2 exp(-(u - μ)^2 / (2 σ^2)) - 1
-// K is the active creature's ring, uploaded as u_kernel.
+// Gaussian G: 2 exp(-(u - μ)^2 / (2 σ^2)) - 1
+// Polynomial G: 2 max(0, 1 - (u - μ)^2 / (9 σ^2))^4 - 1
+// K is the active creature's kernel, uploaded as u_kernel.
 // The loop bound matches MAX_KERNEL_RADIUS. Neighbors wrap through the sampler.
 export const SIM_FRAG = `#version 300 es
 precision highp float;
@@ -52,6 +53,7 @@ uniform float u_sigma;
 uniform float u_dt;
 uniform float u_radius;
 uniform float u_kernelReady;
+uniform float u_polynomialGrowth;
 in vec2 v_uv;
 out vec4 out_color;
 
@@ -60,6 +62,11 @@ const int MAX_R = ${MAX_KERNEL_RADIUS};
 float growth(float potential) {
 	float sigma = max(u_sigma, 1e-4);
 	float x = (potential - u_mu) / sigma;
+	if (u_polynomialGrowth > 0.5) {
+		float bell = max(0.0, 1.0 - x * x / 9.0);
+		bell = bell * bell;
+		return bell * bell * 2.0 - 1.0;
+	}
 	return 2.0 * exp(-0.5 * x * x) - 1.0;
 }
 

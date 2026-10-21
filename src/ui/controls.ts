@@ -7,12 +7,13 @@ import {
 	DECAPTERYX,
 	HEPTAPTERYX,
 	HEXAPTERYX,
+	HYDROGEMINIUM,
 	NONAPTERYX,
 	OCTAPTERYX,
 	ORBIUM,
 	TETRACOSAPTERYX,
 } from "../sim/creature"
-import { MAX_KERNEL_RADIUS } from "../sim/kernel"
+import { type KernelSpec, MAX_KERNEL_RADIUS } from "../sim/kernel"
 
 export interface LeniaControls {
 	dispose: () => void
@@ -109,9 +110,34 @@ export function mountControls(
 		})
 	}
 
+	const hydroRule = pane.addFolder({
+		title: `Rule μ ${HYDROGEMINIUM.rule.mu}, σ ${HYDROGEMINIUM.rule.sigma}, heights ${ringHeights(HYDROGEMINIUM.rule.kernel)}`,
+		expanded: true,
+	})
+	hydroRule
+		.addButton({ title: "Add Hydrogeminium natans" })
+		.on("click", () => place(HYDROGEMINIUM))
+
 	return {
 		dispose: () => {
 			pane.dispose()
 		},
 	}
+}
+
+/** Heights of a polynomial ring kernel, as short fractions. */
+function ringHeights(kernel: KernelSpec): string {
+	if (kernel.kind !== "polynomialRings") return ""
+	return kernel.peaks.map(formatHeight).join(", ")
+}
+
+function formatHeight(peak: number): string {
+	if (Math.abs(peak - 1) < 1e-6) return "1"
+	for (let denominator = 2; denominator <= 12; denominator++) {
+		const numerator = Math.round(peak * denominator)
+		if (Math.abs(numerator / denominator - peak) < 1e-6) {
+			return `${numerator}/${denominator}`
+		}
+	}
+	return String(peak)
 }
