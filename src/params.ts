@@ -1,3 +1,4 @@
+import type { ChannelRule } from "./sim/channels"
 import { ORBIUM } from "./sim/creature"
 import type { GrowthKind, KernelSpec } from "./sim/kernel"
 
@@ -9,6 +10,11 @@ export interface LeniaParams {
 	radius: number
 	growth: GrowthKind
 	kernel: KernelSpec
+	/**
+	 * Set while a three-channel genotype is the live rule.
+	 * The step then uses these sensors and ignores mu, sigma, dt, radius, growth, and kernel.
+	 */
+	channels: ChannelRule | undefined
 	/** CSS pixels covered by one cell. The field is stretched to fill the canvas. */
 	resolution: number
 	speed: number
@@ -24,6 +30,7 @@ export function createLeniaParams(): LeniaParams {
 		radius: ORBIUM.rule.radius,
 		growth: ORBIUM.rule.growth,
 		kernel: ORBIUM.rule.kernel,
+		channels: undefined,
 		resolution: 4,
 		speed: 1,
 		paused: true,

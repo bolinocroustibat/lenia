@@ -1,6 +1,9 @@
 /** Largest radius the fragment loop can sample. The R slider stops here. */
 export const MAX_KERNEL_RADIUS = 18
 
+/** Sensors the multi-channel shader can apply in one step. */
+export const MAX_SENSORS = 15
+
 /** How G maps the neighborhood sum into a change. */
 export type GrowthKind = "gaussian" | "polynomial"
 
@@ -104,6 +107,44 @@ function shellWeight(distance: number, peaks: readonly number[]): number {
 	const fraction = Math.min(scaled % 1, 1)
 	const core = 4 * fraction * (1 - fraction)
 	return (peaks[index] ?? 0) * core ** 4
+}
+
+/**
+ * One normalized ring per sensor, centered in a shared square.
+ * Texel (dx + atlasRadius, dy + atlasRadius) on layer k is the weight for offset (dx, dy).
+ */
+export function packSensorKernels(
+	sensors: readonly { radius: number; peaks: readonly number[] }[],
+): { atlasRadius: number; weights: Float32Array } {
+	if (sensors.length === 0) throw new Error("Sensor list is empty")
+	if (sensors.length > MAX_SENSORS) {
+		throw new Error(
+			`Sensor list has ${sensors.length}, limit is ${MAX_SENSORS}`,
+		)
+	}
+	const atlasRadius = sensors.reduce(
+		(max, sensor) => Math.max(max, clampKernelRadius(sensor.radius)),
+		1,
+	)
+	const size = atlasRadius * 2 + 1
+	const weights = new Float32Array(size * size * sensors.length)
+
+	sensors.forEach((sensor, layer) => {
+		const kernelRadius = clampKernelRadius(sensor.radius)
+		const kernel = buildRingShell(kernelRadius, sensor.peaks)
+		const kernelSize = kernelRadius * 2 + 1
+		const offset = atlasRadius - kernelRadius
+		const base = layer * size * size
+		for (let y = 0; y < kernelSize; y++) {
+			for (let x = 0; x < kernelSize; x++) {
+				const atlasX = x + offset
+				const atlasY = y + offset
+				weights[base + atlasY * size + atlasX] = kernel[y * kernelSize + x] ?? 0
+			}
+		}
+	})
+
+	return { atlasRadius, weights }
 }
 
 function normalizeKernel(weights: Float32Array, sum: number): Float32Array {

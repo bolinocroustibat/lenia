@@ -1,7 +1,15 @@
+/** Floats stored for each cell: red, green, blue, and an unused alpha. */
+export const FIELD_CHANNELS = 4
+
+/** Cells in an RGBA field, including the unused alpha. */
+export function fieldLength(width: number, height: number): number {
+	return width * height * FIELD_CHANNELS
+}
+
 /**
  * Two float textures and their framebuffers.
  * A step reads `readTexture` and writes `writeFramebuffer`, then `swap()` exchanges them.
- * State is R32F so cell values are not quantized to 8 bits.
+ * State is RGBA32F so each channel stays a 32-bit float.
  */
 export class PingPong {
 	private readIndex = 0
@@ -35,10 +43,10 @@ export class PingPong {
 	}
 
 	upload(field: Float32Array): void {
-		const cellCount = this.width * this.height
-		if (field.length !== cellCount) {
+		const expected = fieldLength(this.width, this.height)
+		if (field.length !== expected) {
 			throw new Error(
-				`Field length ${field.length} does not match ${this.width}×${this.height}`,
+				`Field length ${field.length} does not match ${this.width}×${this.height}×${FIELD_CHANNELS}`,
 			)
 		}
 		const gl = this.gl
@@ -51,7 +59,7 @@ export class PingPong {
 			0,
 			this.width,
 			this.height,
-			gl.RED,
+			gl.RGBA,
 			gl.FLOAT,
 			field,
 		)
@@ -61,9 +69,9 @@ export class PingPong {
 	/** Copy the current field back to the CPU. Row 0 matches the uploaded layout. */
 	download(): Float32Array {
 		const gl = this.gl
-		const pixels = new Float32Array(this.width * this.height)
+		const pixels = new Float32Array(fieldLength(this.width, this.height))
 		gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[this.readIndex])
-		gl.readPixels(0, 0, this.width, this.height, gl.RED, gl.FLOAT, pixels)
+		gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.FLOAT, pixels)
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 		return pixels
 	}
@@ -83,11 +91,11 @@ export class PingPong {
 		gl.texImage2D(
 			gl.TEXTURE_2D,
 			0,
-			gl.R32F,
+			gl.RGBA32F,
 			this.width,
 			this.height,
 			0,
-			gl.RED,
+			gl.RGBA,
 			gl.FLOAT,
 			null,
 		)

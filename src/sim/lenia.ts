@@ -1,16 +1,31 @@
 import {
 	bindField,
 	createFieldSamplers,
+	FIELD_CHANNELS,
 	type FieldSamplers,
+	fieldLength,
 	PingPong,
 } from "../gl/pingPong"
 import { FullscreenQuad } from "../gl/quad"
 import { createProgram, uniform } from "../gl/shaders"
 import type { LeniaParams } from "../params"
+import type { ChannelCreature, ChannelRule } from "./channels"
 import { type Creature, ORBIUM } from "./creature"
-import { COPY_FRAG, DISPLAY_FRAG, QUAD_VERT, SIM_FRAG } from "./glsl"
-import { clampKernelRadius, kernelCacheKey, kernelWeights } from "./kernel"
-import { seedField, stampCreature } from "./seed"
+import {
+	CHANNEL_FRAG,
+	COPY_FRAG,
+	DISPLAY_FRAG,
+	QUAD_VERT,
+	SIM_FRAG,
+} from "./glsl"
+import {
+	clampKernelRadius,
+	kernelCacheKey,
+	kernelWeights,
+	MAX_SENSORS,
+	packSensorKernels,
+} from "./kernel"
+import { seedField, stampChannels, stampCreature } from "./seed"
 
 /** The simulation shader convolves with the ring kernel. 0 would copy the field. */
 export const KERNEL_READY = 1
@@ -45,6 +60,21 @@ interface SimUniforms {
 	polynomialGrowth: WebGLUniformLocation
 }
 
+interface ChannelUniforms {
+	state: WebGLUniformLocation
+	kernels: WebGLUniformLocation
+	texelSize: WebGLUniformLocation
+	dt: WebGLUniformLocation
+	atlasRadius: WebGLUniformLocation
+	sensorCount: WebGLUniformLocation
+	mu: WebGLUniformLocation
+	sigma: WebGLUniformLocation
+	weight: WebGLUniformLocation
+	radius: WebGLUniformLocation
+	source: WebGLUniformLocation
+	dest: WebGLUniformLocation
+}
+
 export class LeniaSimulation {
 	private targets: PingPong | undefined
 	private gridWidth = 0
@@ -52,18 +82,31 @@ export class LeniaSimulation {
 	private readonly quad: FullscreenQuad
 	private readonly samplers: FieldSamplers
 	private readonly simProgram: WebGLProgram
+	private readonly channelProgram: WebGLProgram
 	private readonly displayProgram: WebGLProgram
 	private readonly copyProgram: WebGLProgram
 	private readonly simUniforms: SimUniforms
+	private readonly channelUniforms: ChannelUniforms
 	private readonly displayState: WebGLUniformLocation
+	private readonly displayRgb: WebGLUniformLocation
 	private readonly copyState: WebGLUniformLocation
 	private kernelTexture: WebGLTexture | undefined
 	private kernelKey = ""
+	private channelKernels: WebGLTexture | undefined
+	private channelKey = ""
+	private channelAtlasRadius = 0
+	private readonly sensorMu = new Float32Array(MAX_SENSORS)
+	private readonly sensorSigma = new Float32Array(MAX_SENSORS)
+	private readonly sensorWeight = new Float32Array(MAX_SENSORS)
+	private readonly sensorRadius = new Float32Array(MAX_SENSORS)
+	private readonly sensorSource = new Int32Array(MAX_SENSORS)
+	private readonly sensorDest = new Int32Array(MAX_SENSORS)
 
 	constructor(private readonly gl: WebGL2RenderingContext) {
 		this.quad = new FullscreenQuad(gl)
 		this.samplers = createFieldSamplers(gl)
 		this.simProgram = createProgram(gl, QUAD_VERT, SIM_FRAG)
+		this.channelProgram = createProgram(gl, QUAD_VERT, CHANNEL_FRAG)
 		this.displayProgram = createProgram(gl, QUAD_VERT, DISPLAY_FRAG)
 		this.copyProgram = createProgram(gl, QUAD_VERT, COPY_FRAG)
 		this.simUniforms = {
@@ -77,7 +120,22 @@ export class LeniaSimulation {
 			kernelReady: uniform(gl, this.simProgram, "u_kernelReady"),
 			polynomialGrowth: uniform(gl, this.simProgram, "u_polynomialGrowth"),
 		}
+		this.channelUniforms = {
+			state: uniform(gl, this.channelProgram, "u_state"),
+			kernels: uniform(gl, this.channelProgram, "u_kernels"),
+			texelSize: uniform(gl, this.channelProgram, "u_texelSize"),
+			dt: uniform(gl, this.channelProgram, "u_dt"),
+			atlasRadius: uniform(gl, this.channelProgram, "u_atlasRadius"),
+			sensorCount: uniform(gl, this.channelProgram, "u_sensorCount"),
+			mu: uniform(gl, this.channelProgram, "u_mu"),
+			sigma: uniform(gl, this.channelProgram, "u_sigma"),
+			weight: uniform(gl, this.channelProgram, "u_weight"),
+			radius: uniform(gl, this.channelProgram, "u_radius"),
+			source: uniform(gl, this.channelProgram, "u_source"),
+			dest: uniform(gl, this.channelProgram, "u_dest"),
+		}
 		this.displayState = uniform(gl, this.displayProgram, "u_state")
+		this.displayRgb = uniform(gl, this.displayProgram, "u_rgb")
 		this.copyState = uniform(gl, this.copyProgram, "u_state")
 	}
 
@@ -105,13 +163,23 @@ export class LeniaSimulation {
 	}
 
 	clear(): void {
-		this.field().upload(new Float32Array(this.gridWidth * this.gridHeight))
+		this.field().upload(
+			new Float32Array(fieldLength(this.gridWidth, this.gridHeight)),
+		)
 	}
 
-	/** Replace the field with a random value in each cell. */
-	randomize(): void {
-		const field = new Float32Array(this.gridWidth * this.gridHeight)
-		for (let i = 0; i < field.length; i++) field[i] = Math.random()
+	/**
+	 * Replace the field with a random value in each live channel.
+	 * A one-channel rule keeps green and blue at 0.
+	 */
+	randomize(allChannels: boolean): void {
+		const field = new Float32Array(fieldLength(this.gridWidth, this.gridHeight))
+		const live = allChannels ? 3 : 1
+		for (let index = 0; index < field.length; index += FIELD_CHANNELS) {
+			for (let channel = 0; channel < live; channel++) {
+				field[index + channel] = Math.random()
+			}
+		}
 		this.field().upload(field)
 	}
 
@@ -123,8 +191,20 @@ export class LeniaSimulation {
 		targets.upload(field)
 	}
 
+	/** Stamp one three-channel pattern onto the current field without clearing it. */
+	addChannels(creature: ChannelCreature): void {
+		const targets = this.field()
+		const field = targets.download()
+		stampChannels(field, this.gridWidth, this.gridHeight, creature.pattern)
+		targets.upload(field)
+	}
+
 	/** Read one texture, write the other, then swap. */
 	step(params: LeniaParams): void {
+		if (params.channels) {
+			this.stepChannels(params.channels)
+			return
+		}
 		const gl = this.gl
 		const targets = this.field()
 		gl.bindFramebuffer(gl.FRAMEBUFFER, targets.writeFramebuffer)
@@ -154,7 +234,7 @@ export class LeniaSimulation {
 	}
 
 	/** Draw the current field across the whole canvas. */
-	draw(): void {
+	draw(rgb: boolean): void {
 		const gl = this.gl
 		const targets = this.field()
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null)
@@ -162,6 +242,7 @@ export class LeniaSimulation {
 		gl.useProgram(this.displayProgram)
 		bindField(gl, 0, targets.readTexture, this.samplers.linear)
 		gl.uniform1i(this.displayState, 0)
+		gl.uniform1f(this.displayRgb, rgb ? 1 : 0)
 		this.quad.draw(this.displayProgram)
 	}
 
@@ -172,10 +253,12 @@ export class LeniaSimulation {
 		gl.bindSampler(1, null)
 		this.targets?.dispose()
 		if (this.kernelTexture) gl.deleteTexture(this.kernelTexture)
+		if (this.channelKernels) gl.deleteTexture(this.channelKernels)
 		this.quad.dispose()
 		gl.deleteSampler(this.samplers.nearest)
 		gl.deleteSampler(this.samplers.linear)
 		gl.deleteProgram(this.simProgram)
+		gl.deleteProgram(this.channelProgram)
 		gl.deleteProgram(this.displayProgram)
 		gl.deleteProgram(this.copyProgram)
 	}
@@ -234,5 +317,107 @@ export class LeniaSimulation {
 	private kernelField(): WebGLTexture {
 		if (!this.kernelTexture) throw new Error("Kernel is not allocated")
 		return this.kernelTexture
+	}
+
+	/** One pass sums every sensor, then clips each channel. */
+	private stepChannels(rule: ChannelRule): void {
+		const gl = this.gl
+		const targets = this.field()
+		const atlasRadius = this.syncChannelKernels(rule)
+		gl.bindFramebuffer(gl.FRAMEBUFFER, targets.writeFramebuffer)
+		gl.viewport(0, 0, this.gridWidth, this.gridHeight)
+		gl.useProgram(this.channelProgram)
+		bindField(gl, 0, targets.readTexture, this.samplers.nearest)
+		gl.activeTexture(gl.TEXTURE1)
+		gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.channelKernelField())
+		gl.bindSampler(1, this.samplers.nearest)
+		this.writeSensorUniforms(rule)
+		gl.uniform1i(this.channelUniforms.state, 0)
+		gl.uniform1i(this.channelUniforms.kernels, 1)
+		gl.uniform2f(
+			this.channelUniforms.texelSize,
+			1 / this.gridWidth,
+			1 / this.gridHeight,
+		)
+		gl.uniform1f(this.channelUniforms.dt, rule.dt)
+		gl.uniform1f(this.channelUniforms.atlasRadius, atlasRadius)
+		gl.uniform1i(this.channelUniforms.sensorCount, rule.sensors.length)
+		this.quad.draw(this.channelProgram)
+		targets.swap()
+	}
+
+	private writeSensorUniforms(rule: ChannelRule): void {
+		const gl = this.gl
+		this.sensorMu.fill(0)
+		this.sensorSigma.fill(0)
+		this.sensorWeight.fill(0)
+		this.sensorRadius.fill(0)
+		this.sensorSource.fill(0)
+		this.sensorDest.fill(0)
+		rule.sensors.forEach((sensor, index) => {
+			this.sensorMu[index] = sensor.mu
+			this.sensorSigma[index] = sensor.sigma
+			this.sensorWeight[index] = sensor.weight
+			this.sensorRadius[index] = sensor.radius
+			this.sensorSource[index] = sensor.source
+			this.sensorDest[index] = sensor.dest
+		})
+		gl.uniform1fv(this.channelUniforms.mu, this.sensorMu)
+		gl.uniform1fv(this.channelUniforms.sigma, this.sensorSigma)
+		gl.uniform1fv(this.channelUniforms.weight, this.sensorWeight)
+		gl.uniform1fv(this.channelUniforms.radius, this.sensorRadius)
+		gl.uniform1iv(this.channelUniforms.source, this.sensorSource)
+		gl.uniform1iv(this.channelUniforms.dest, this.sensorDest)
+	}
+
+	/** Rebuild the kernel array when a sensor's radius or ring peaks change. */
+	private syncChannelKernels(rule: ChannelRule): number {
+		const key = rule.sensors
+			.map((sensor) => `${sensor.radius}:${sensor.peaks.join(",")}`)
+			.join("|")
+		if (this.channelKernels && key === this.channelKey) {
+			return this.channelAtlasRadius
+		}
+		const gl = this.gl
+		const packed = packSensorKernels(rule.sensors)
+		const size = packed.atlasRadius * 2 + 1
+		if (!this.channelKernels) {
+			const texture = gl.createTexture()
+			if (!texture) throw new Error("Could not create kernel array")
+			this.channelKernels = texture
+		}
+		gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.channelKernels)
+		gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+		gl.texImage3D(
+			gl.TEXTURE_2D_ARRAY,
+			0,
+			gl.R32F,
+			size,
+			size,
+			rule.sensors.length,
+			0,
+			gl.RED,
+			gl.FLOAT,
+			packed.weights,
+		)
+		gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+		gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+		gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+		gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+		gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
+		gl.bindTexture(gl.TEXTURE_2D_ARRAY, null)
+		const uploadError = gl.getError()
+		if (uploadError !== gl.NO_ERROR) {
+			throw new Error(`Kernel array upload failed (${uploadError})`)
+		}
+		this.channelKey = key
+		this.channelAtlasRadius = packed.atlasRadius
+		return packed.atlasRadius
+	}
+
+	private channelKernelField(): WebGLTexture {
+		if (!this.channelKernels)
+			throw new Error("Channel kernels are not allocated")
+		return this.channelKernels
 	}
 }

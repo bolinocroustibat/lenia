@@ -1,5 +1,7 @@
 import { Pane } from "tweakpane"
 import type { LeniaParams } from "../params"
+import { AQUARIUM_REPLICATOR, AQUARIUM_SWARM } from "../sim/aquarium"
+import { applyChannelRule, type ChannelCreature } from "../sim/channels"
 import {
 	applyCreatureRule,
 	CIRCIUM,
@@ -24,6 +26,7 @@ export function mountControls(
 	onClear: () => void,
 	onRandomize: () => void,
 	onAddCreature: (creature: Creature) => void,
+	onAddChannels: (creature: ChannelCreature) => void,
 ): LeniaControls {
 	const pane = new Pane({ title: "Lenia", expanded: true })
 
@@ -117,6 +120,22 @@ export function mountControls(
 	hydroRule
 		.addButton({ title: "Add Hydrogeminium natans" })
 		.on("click", () => place(HYDROGEMINIUM))
+
+	const channels = pane.addFolder({
+		title: "Three channels",
+		expanded: true,
+	})
+	const placeChannels = (creature: ChannelCreature) => {
+		applyChannelRule(params, creature)
+		pane.refresh()
+		onAddChannels(creature)
+	}
+	channels
+		.addButton({ title: "Add Aquarium replicator" })
+		.on("click", () => placeChannels(AQUARIUM_REPLICATOR))
+	channels
+		.addButton({ title: "Add Aquarium swarm" })
+		.on("click", () => placeChannels(AQUARIUM_SWARM))
 
 	return {
 		dispose: () => {

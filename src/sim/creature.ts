@@ -5092,4 +5092,5 @@ export function applyCreatureRule(
 	params.radius = creature.rule.radius
 	params.growth = creature.rule.growth
 	params.kernel = creature.rule.kernel
+	params.channels = undefined
 }

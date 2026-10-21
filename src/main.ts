@@ -5,6 +5,7 @@ import {
 	showError,
 } from "./gl/context"
 import { createLeniaParams } from "./params"
+import type { ChannelCreature } from "./sim/channels"
 import type { Creature } from "./sim/creature"
 import { gridSizeForCanvas, LeniaSimulation } from "./sim/lenia"
 import { mountControls } from "./ui/controls"
@@ -28,6 +29,7 @@ function start(): void {
 	let clearRequested = false
 	let randomizeRequested = false
 	let creatureToAdd: Creature | undefined
+	let channelsToAdd: ChannelCreature | undefined
 
 	const controls = mountControls(
 		params,
@@ -39,6 +41,9 @@ function start(): void {
 		},
 		(creature) => {
 			creatureToAdd = creature
+		},
+		(creature) => {
+			channelsToAdd = creature
 		},
 	)
 
@@ -66,18 +71,22 @@ function start(): void {
 			clearRequested = false
 		}
 		if (randomizeRequested) {
-			sim.randomize()
+			sim.randomize(params.channels !== undefined)
 			randomizeRequested = false
 		}
 		if (creatureToAdd) {
 			sim.addCreature(creatureToAdd)
 			creatureToAdd = undefined
 		}
+		if (channelsToAdd) {
+			sim.addChannels(channelsToAdd)
+			channelsToAdd = undefined
+		}
 		if (stepSimulation && !params.paused) {
 			const steps = Math.max(1, Math.round(params.speed))
 			for (let step = 0; step < steps; step++) sim.step(params)
 		}
-		sim.draw()
+		sim.draw(params.channels !== undefined)
 	}
 
 	render(false)

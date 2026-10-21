@@ -1,80 +1,69 @@
-# Lenia WebGL readiness
+# Next: two-channel creatures
 
-The WebGL2 scaffold is in place, and each step runs the Orbium update. `KERNEL_READY` is `1` in [src/sim/lenia.ts](src/sim/lenia.ts). `convolve` in [src/sim/glsl.ts](src/sim/glsl.ts) sums the ring kernel.
+One-channel animals and the three-channel Aquarium presets already run. The next work is to add Bert Chan’s published two-channel solitons from [`222.json`](https://github.com/Chakazul/Lenia/blob/master/Python/found/222.json).
 
-Lenia's update is:
+Two channels is the smallest rule where one channel can be a core and the other a body. Cross-sensors hold the pair together. The update is the same as Aquarium:
 
-`A ← clip(A + dt · G(K ∗ A), 0, 1)` with `G(u) = 2 exp(-(u − μ)² / (2σ²)) − 1`
+`A_dest ← clip(A_dest + dt · Σ (h / H_dest) · G(K ∗ A_source), 0, 1)`
 
-The panel values (μ = 0.15, σ = 0.015, dt = 0.1, R = 13) are Orbium's growth parameters from Bert Chan's Lenia. The ring is a Gaussian shell with μ_K = 0.5 and σ_K = 0.15, built on the CPU, normalized so the weights sum to 1, and uploaded as a small `R32F` texture. The R slider stops at 16, which is the fragment loop's bound.
-
-[src/sim/seed.ts](src/sim/seed.ts) stamps one copy of Bert Chan's Orbium unicaudatus. Randomize moves that copy. The patch stays at its native size for R = 13.
+`H_dest` is the sum of strengths writing into that destination. Growth and rings stay polynomial (`kn = 1`, `gn = 1` in Chan’s LeniaNDKC, which is already what [src/sim/glsl.ts](src/sim/glsl.ts) `CHANNEL_FRAG` and [src/sim/kernel.ts](src/sim/kernel.ts) `buildRingShell` do). Blue stays empty.
 
 ```mermaid
 flowchart LR
-  seed[CPU seed upload] --> readTex[Read R32F texture]
-  readTex --> conv["convolve: ring kernel"]
-  conv --> growth[Gaussian growth plus Euler step]
-  growth --> writeTex[Write R32F texture]
-  writeTex --> swap[Swap]
-  swap --> display[Color display]
+  json["222.json"] --> decode[Decode RLE and peaks]
+  decode --> presets[Two-channel presets]
+  presets --> rule[Six sensors, red and green]
+  rule --> step[Existing channel step]
+  step --> rgb[RGB display, blue empty]
 ```
 
-## Review
+## What to ship
 
-What is in good shape:
+Nine genotypes, each with six sensors (two self-rules per channel, plus one each way). Time step is `1 / T = 0.1`. Missing `h` is 1. Missing `r` is 1, so every sensor uses the full base radius. `b` is the ring heights.
 
-- Float field as `R32F` with `EXT_color_buffer_float`, ping-pong framebuffers, and nearest sampling on the step. Linear sampling is only used to stretch the field on screen or across a resize.
-- Toroidal wrap is already set (`REPEAT` on the sampler). The display shader flips Y so texture row 0 is the top of the canvas; the step samples unflipped texture space, so wrap stays consistent.
-- Grid size is CSS pixels divided by `resolution` (default 4), then stretched to the drawing buffer. Reseed, pause, and steps-per-frame already drive the loop in [src/main.ts](src/main.ts).
+| Code | Name in the file | R | Why it is here |
+| --- | --- | --- | --- |
+| Found #5 | object | 20 | Only named one. Two overlapping blobs. |
+| Found #29 | | 20 | Compact pair. |
+| Found #30 | | 15 | Compact, fits today’s radius cap. |
+| Found #33 | | 15 | Longer body. |
+| Found #8 | | 20 | Larger soliton. |
+| Found #19 | | 20 | Large field. |
+| Found #20 | | 20 | Large field. |
+| Found #35 | | 15 | Large field. |
+| (none) | pattern | 14 | Smallest radius. |
 
-What to leave alone for this step:
+Decode every pattern. Add a button for each one that stays alive after Play. Drop any that die or flood. Expect a few compact ones to survive (`object`, #29, #30) and do not invent replacements.
 
-- Radii above 16 still want a different convolution later, not a bigger fragment loop.
-- There is no pixel readback or test runner. The CPU kernel builder already checks that the weights sum to 1.
-- [biome.json](biome.json) has `"root": false` so formatting expects a parent config, as the README says.
+## Work
 
-## Next small step
+### 1 — Radius 20
 
-The Orbium patch is in place: one copy on the torus, moved by Randomize, at its native size for R = 13.
+Several animals were found at `R = 20`. [src/sim/kernel.ts](src/sim/kernel.ts) `MAX_KERNEL_RADIUS` is 18, and `clampKernelRadius` would shrink those kernels and likely kill them. Raise the cap to 20. Six sensors at radius 20 is still cheaper than Aquarium’s fifteen sensors at radius 12.
 
-The following work is the Rust core below.
+### 2 — Decode Chan’s strings into presets
 
-## Later: Rust core, then WASM
+Chan stores each channel as one RLE string. `.` and `b` are 0, `o` is 1, a single letter `A`–`X` is `(code − 'A' + 1) / 255`, and a two-letter token like `yO` is `((first − 'p') · 24 + (second − 'A' + 25)) / 255`. Digits are run counts. `$` starts the next row. `!` ends the grid.
 
-A standalone Rust version is a small port, and the browser version can be the same crate compiled to WASM. The rules already live in a few pure functions: the ring in [src/sim/kernel.ts](src/sim/kernel.ts), the seed in [src/sim/seed.ts](src/sim/seed.ts), and the update in the shader in [src/sim/glsl.ts](src/sim/glsl.ts).
+Write a one-off decoder (do not run it in the browser). Emit TypeScript grids in a new file next to [src/sim/aquarium.ts](src/sim/aquarium.ts), same `ChannelCreature` shape. Third channel is zeros. Parse `b` with the same fractions Aquarium already uses (`1`, `2/3`, `5/6`, …).
 
-WebGL textures, ping-pong, and the panel do not move. A GPU rewrite (wgpu / WGSL) that matches today's shaders is a later project, not these steps.
+`prepareChannelRule` already normalizes strengths per destination. Six sensors of strength 1 is enough.
 
-```mermaid
-flowchart LR
-  core[lenia-core]
-  native[native window]
-  wasm[wasm-bindgen]
-  canvas[2D canvas page]
-  webgl[existing WebGL sim]
-  core --> native
-  core --> wasm --> canvas
-```
+### 3 — Panel
 
-Direct convolution at R = 13 is fine on a fixed grid around 128×128 or 256×256. Full-window grids stay on the WebGL page.
+Add a **Two channels** folder beside **Three channels** in [src/ui/controls.ts](src/ui/controls.ts). Same gesture as Aquarium: load the genotype, stamp the pattern, do not clear first. One-channel sliders stay as they are. Do not add six new sliders.
 
-### Step 1 — library and tests
+Randomize may keep filling all three channels while a channel rule is live. Blue has no sensor, so leftover blue is unused. Optional: fill only red and green for a two-channel rule.
 
-Add `crates/lenia-core` with no window and no WASM. It owns:
+### 4 — Check in the browser
 
-- Orbium params (μ = 0.15, σ = 0.015, dt = 0.1, R = 13, kernel peaks μ_K = 0.5, σ_K = 0.15)
-- `build_ring_kernel` and a toroidal seed, copied from the TypeScript
-- a double-buffered `Vec<f32>` and `step`
+For each button: Reset to empty, add while paused (red and green blob, not the one-channel color ramp), Play, wait a few seconds. Keep it if the pair holds together or glides. Remove it if the field goes black or fills the screen.
 
-Tests: weights sum to 1, values stay in `[0, 1]`, a 1-cell kernel matches a hand-computed step. `cargo test` is the whole milestone.
+Then add Orbium and confirm the color ramp comes back. Then add an Aquarium preset and confirm three-channel still works.
 
-### Step 2 — native window
+## Leave alone
 
-Add a binary in the same crate (or `crates/lenia`) that allocates one fixed grid, seeds it, and draws each step into a small window (`winit` + `softbuffer` is enough). Hardcoded Orbium params. Space toggles pause. No sliders.
-
-### Step 3 — same crate in the browser
-
-Build the library as a `cdylib` with `wasm-bindgen`: construct a grid, `step`, and borrow the field as a `Float32Array`. A second Vite page paints that buffer on a 2D canvas with the same color ramp as `DISPLAY_FRAG`. The WebGL app in [src/main.ts](src/main.ts) stays as it is.
-
-Vite already builds this repo, so the WASM bundle is an import on that second page, not a separate site.
+- Aquarium sensors, seeds, and buttons.
+- The one-channel animals and their sliders.
+- Rust / WASM. That is still a later port of the same rules, not this step.
+- New two-channel genotypes. Only `222.json`.

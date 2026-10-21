@@ -1,4 +1,4 @@
-import { MAX_KERNEL_RADIUS } from "./kernel"
+import { MAX_KERNEL_RADIUS, MAX_SENSORS } from "./kernel"
 
 export const QUAD_VERT = `#version 300 es
 in vec2 a_position;
@@ -9,26 +9,33 @@ void main() {
 }
 `
 
-// Copies the scalar field into a new grid. Sampling filter decides nearest or stretched.
+// Copies every channel into a new grid. Sampling filter decides nearest or stretched.
 export const COPY_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_state;
 in vec2 v_uv;
 out vec4 out_color;
 void main() {
-	out_color = vec4(texture(u_state, v_uv).r, 0.0, 0.0, 1.0);
+	out_color = texture(u_state, v_uv);
 }
 `
 
-// Scalar field in the red channel. Row 0 of the texture is shown at the top.
+// Red channel uses the color ramp. Three-channel rules draw red, green, and blue.
+// Row 0 of the texture is shown at the top. Empty cells stay dark.
 export const DISPLAY_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_state;
+uniform float u_rgb;
 in vec2 v_uv;
 out vec4 out_color;
 void main() {
 	vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
-	float value = clamp(texture(u_state, uv).r, 0.0, 1.0);
+	vec3 state = clamp(texture(u_state, uv).rgb, 0.0, 1.0);
+	if (u_rgb > 0.5) {
+		out_color = vec4(state, 1.0);
+		return;
+	}
+	float value = state.r;
 	vec3 low = vec3(0.03, 0.04, 0.08);
 	vec3 mid = vec3(0.15, 0.75, 0.72);
 	vec3 high = vec3(0.98, 0.93, 0.75);
@@ -90,5 +97,77 @@ void main() {
 	float integrated = clamp(state + u_dt * growth(potential), 0.0, 1.0);
 	float next = mix(state, integrated, u_kernelReady);
 	out_color = vec4(next, 0.0, 0.0, 1.0);
+}
+`
+
+// A_dest <- clip(A_dest + dt * sum (weight * G(K * A_source)), 0, 1)
+// Each sensor has its own ring, its own polynomial growth, and a weight that
+// already sums to 1 among the sensors writing into that destination.
+// The loop bounds match MAX_SENSORS and MAX_KERNEL_RADIUS.
+export const CHANNEL_FRAG = `#version 300 es
+precision highp float;
+precision highp sampler2DArray;
+uniform sampler2D u_state;
+uniform highp sampler2DArray u_kernels;
+uniform vec2 u_texelSize;
+uniform float u_dt;
+uniform float u_atlasRadius;
+uniform int u_sensorCount;
+uniform float u_mu[${MAX_SENSORS}];
+uniform float u_sigma[${MAX_SENSORS}];
+uniform float u_weight[${MAX_SENSORS}];
+uniform float u_radius[${MAX_SENSORS}];
+uniform int u_source[${MAX_SENSORS}];
+uniform int u_dest[${MAX_SENSORS}];
+in vec2 v_uv;
+out vec4 out_color;
+
+const int MAX_R = ${MAX_KERNEL_RADIUS};
+const int MAX_SENSORS = ${MAX_SENSORS};
+
+float growth(float potential, float mu, float sigma) {
+	float x = (potential - mu) / max(sigma, 1e-4);
+	float bell = max(0.0, 1.0 - x * x / 9.0);
+	bell = bell * bell;
+	return bell * bell * 2.0 - 1.0;
+}
+
+float channelOf(vec3 state, int channel) {
+	if (channel == 1) return state.g;
+	if (channel == 2) return state.b;
+	return state.r;
+}
+
+float convolve(vec2 uv, int sensor, int radius, int source) {
+	int atlas = int(u_atlasRadius + 0.5);
+	float sum = 0.0;
+	for (int dy = -MAX_R; dy <= MAX_R; dy++) {
+		for (int dx = -MAX_R; dx <= MAX_R; dx++) {
+			if (abs(dx) > radius || abs(dy) > radius) continue;
+			float weight = texelFetch(u_kernels, ivec3(dx + atlas, dy + atlas, sensor), 0).r;
+			vec2 sampleUv = uv + vec2(float(dx), float(dy)) * u_texelSize;
+			sum += weight * channelOf(texture(u_state, sampleUv).rgb, source);
+		}
+	}
+	return sum;
+}
+
+void main() {
+	vec3 state = texture(u_state, v_uv).rgb;
+	vec3 delta = vec3(0.0);
+	for (int sensor = 0; sensor < MAX_SENSORS; sensor++) {
+		if (sensor >= u_sensorCount) break;
+		int radius = int(u_radius[sensor] + 0.5);
+		float change = u_weight[sensor] * growth(
+			convolve(v_uv, sensor, radius, u_source[sensor]),
+			u_mu[sensor],
+			u_sigma[sensor]
+		);
+		int dest = u_dest[sensor];
+		if (dest == 0) delta.r += change;
+		else if (dest == 1) delta.g += change;
+		else delta.b += change;
+	}
+	out_color = vec4(clamp(state + u_dt * delta, 0.0, 1.0), 1.0);
 }
 `
