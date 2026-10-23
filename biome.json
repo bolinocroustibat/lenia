@@ -1,5 +1,8 @@
 {
 	"root": false,
+	"files": {
+		"includes": ["**", "!dist", "!scripts/222.json"]
+	},
 	"javascript": {
 		"formatter": {
 			"semicolons": "asNeeded"

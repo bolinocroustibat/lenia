@@ -1,5 +1,5 @@
 /** Largest radius the fragment loop can sample. The R slider stops here. */
-export const MAX_KERNEL_RADIUS = 18
+export const MAX_KERNEL_RADIUS = 20
 
 /** Sensors the multi-channel shader can apply in one step. */
 export const MAX_SENSORS = 15

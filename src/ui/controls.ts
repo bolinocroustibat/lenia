@@ -16,6 +16,14 @@ import {
 	TETRACOSAPTERYX,
 } from "../sim/creature"
 import { type KernelSpec, MAX_KERNEL_RADIUS } from "../sim/kernel"
+import {
+	FOUND_8,
+	FOUND_19,
+	FOUND_29,
+	FOUND_30,
+	FOUND_33,
+	OBJECT,
+} from "../sim/solitons"
 
 export interface LeniaControls {
 	dispose: () => void
@@ -136,6 +144,25 @@ export function mountControls(
 	channels
 		.addButton({ title: "Add Aquarium swarm" })
 		.on("click", () => placeChannels(AQUARIUM_SWARM))
+
+	const twoChannels = pane.addFolder({
+		title: "Two channels",
+		expanded: true,
+	})
+	// Only the genotypes that survive Play. The others in solitons.ts (pattern,
+	// Found #20, Found #35) die or flood, so they get no button.
+	for (const creature of [
+		OBJECT,
+		FOUND_8,
+		FOUND_19,
+		FOUND_29,
+		FOUND_30,
+		FOUND_33,
+	]) {
+		twoChannels
+			.addButton({ title: `Add ${creature.name}` })
+			.on("click", () => placeChannels(creature))
+	}
 
 	return {
 		dispose: () => {

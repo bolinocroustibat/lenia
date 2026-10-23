@@ -1,0 +1,226 @@
+/**
+ * One-off decoder for Bert Chan's two-channel solitons in `222.json`.
+ *
+ * Run with Bun (never in the browser):
+ *   bun run scripts/decode-222.ts
+ *
+ * It reads `scripts/222.json` and writes `src/sim/solitons.ts` with one
+ * `ChannelCreature` per genotype, same shape as `src/sim/aquarium.ts`.
+ */
+
+import { readFileSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+
+const here = dirname(fileURLToPath(import.meta.url))
+const inputPath = join(here, "222.json")
+const outputPath = join(here, "..", "src", "sim", "solitons.ts")
+
+interface RawParam {
+	R: number
+	T: number
+	b: string
+	m: number
+	s: number
+	c: [number, number]
+}
+
+interface RawGenotype {
+	code: string
+	name: string
+	params: RawParam[]
+	cells: [string, string]
+}
+
+/** The file is a trailing-comma list of objects, not a JSON array. */
+function parseGenotypes(text: string): RawGenotype[] {
+	const trimmed = text.trim().replace(/,\s*$/, "")
+	return JSON.parse(`[${trimmed}]`)
+}
+
+/** Chan's RLE: one cell is `.`/`b` (0), `o` (255), a single `A`-`X`, or a
+ * two-letter token (`p`-`y` then `A`-`X`). Digits are run counts, `$` ends a
+ * row, `!` ends the grid. Returns one code (0..255) per cell, row by row. */
+function decodeChannel(rle: string): number[][] {
+	const rows: number[][] = []
+	let row: number[] = []
+	let count = ""
+	let i = 0
+	while (i < rle.length) {
+		const ch = rle[i]
+		if (ch >= "0" && ch <= "9") {
+			count += ch
+			i += 1
+			continue
+		}
+		if (ch === "$") {
+			rows.push(row)
+			row = []
+			count = ""
+			i += 1
+			continue
+		}
+		if (ch === "!") break
+
+		let value: number
+		if (ch === "." || ch === "b") {
+			value = 0
+			i += 1
+		} else if (ch === "o") {
+			value = 255
+			i += 1
+		} else if (ch >= "A" && ch <= "X") {
+			value = ch.charCodeAt(0) - 65 + 1
+			i += 1
+		} else if (ch >= "p" && ch <= "y") {
+			const second = rle[i + 1]
+			value =
+				(ch.charCodeAt(0) - "p".charCodeAt(0)) * 24 +
+				(second.charCodeAt(0) - 65 + 25)
+			i += 2
+		} else {
+			throw new Error(`Unexpected RLE char ${JSON.stringify(ch)} at ${i}`)
+		}
+
+		const run = count === "" ? 1 : Number.parseInt(count, 10)
+		count = ""
+		for (let k = 0; k < run; k++) row.push(value)
+	}
+	if (row.length > 0) rows.push(row)
+	return rows
+}
+
+/** Pad every row to `width` with zeros. */
+function toGrid(rows: number[][], width: number, height: number): number[] {
+	const flat: number[] = []
+	for (let y = 0; y < height; y++) {
+		const row = rows[y] ?? []
+		for (let x = 0; x < width; x++) flat.push(row[x] ?? 0)
+	}
+	return flat
+}
+
+/** `"1,5/6,1/2"` -> `"[1, 5 / 6, 1 / 2]"` as source text. */
+function peaksSource(b: string): string {
+	const peaks = b.split(",").map((token) => {
+		const part = token.trim()
+		if (part.includes("/")) {
+			const [num, den] = part.split("/")
+			return `${num.trim()} / ${den.trim()}`
+		}
+		return part
+	})
+	return `[${peaks.join(", ")}]`
+}
+
+/** Export identifier and human label for a genotype. */
+function identity(genotype: RawGenotype): { id: string; label: string } {
+	const { code, name } = genotype
+	if (name === "object") return { id: "OBJECT", label: `${code} (${name})` }
+	const found = code.match(/^Found #(\d+)$/)
+	if (found) return { id: `FOUND_${found[1]}`, label: code }
+	if (name) return { id: name.toUpperCase(), label: name }
+	throw new Error(`Cannot name genotype ${JSON.stringify(genotype.code)}`)
+}
+
+function sensorSource(param: RawParam): string {
+	const [source, dest] = param.c
+	return [
+		"\t\t{",
+		`\t\t\tsource: ${source},`,
+		`\t\t\tdest: ${dest},`,
+		`\t\t\tmu: ${param.m},`,
+		`\t\t\tsigma: ${param.s},`,
+		"\t\t\tstrength: 1,",
+		"\t\t\tradiusFraction: 1,",
+		`\t\t\tpeaks: ${peaksSource(param.b)},`,
+		"\t\t},",
+	].join("\n")
+}
+
+function creatureSource(genotype: RawGenotype): {
+	id: string
+	source: string
+} {
+	const { id, label } = identity(genotype)
+	const { R, T } = genotype.params[0]
+
+	const red = decodeChannel(genotype.cells[0])
+	const green = decodeChannel(genotype.cells[1])
+	const height = Math.max(red.length, green.length)
+	const width = Math.max(
+		...red.map((r) => r.length),
+		...green.map((r) => r.length),
+	)
+
+	const redGrid = toGrid(red, width, height)
+	const greenGrid = toGrid(green, width, height)
+
+	const sensors = genotype.params.map(sensorSource).join("\n")
+
+	const source = `const ${id}_RED = grid(
+	${width},
+	${height},
+	[${redGrid.join(", ")}],
+)
+
+const ${id}_GREEN = grid(
+	${width},
+	${height},
+	[${greenGrid.join(", ")}],
+)
+
+export const ${id}: ChannelCreature = {
+	name: ${JSON.stringify(label)},
+	dt: ${1 / T},
+	radius: ${R},
+	sensors: [
+${sensors}
+	],
+	pattern: {
+		width: ${width},
+		height: ${height},
+		channels: [${id}_RED, ${id}_GREEN, zeros(${width}, ${height})],
+	},
+}
+`
+	return { id, source }
+}
+
+function main(): void {
+	const genotypes = parseGenotypes(readFileSync(inputPath, "utf8"))
+	const creatures = genotypes.map(creatureSource)
+
+	const header = `import type { ChannelCreature } from "./channels"
+
+// Generated by scripts/decode-222.ts from Bert Chan's 222.json. Do not edit by hand.
+
+/** A grid of 0..255 codes, normalized to 0..1. */
+function grid(width: number, height: number, codes: number[]): Float32Array {
+	if (codes.length !== width * height) {
+		throw new Error(\`Grid \${codes.length} does not match \${width}×\${height}\`)
+	}
+	const out = new Float32Array(codes.length)
+	for (let i = 0; i < codes.length; i++) out[i] = (codes[i] ?? 0) / 255
+	return out
+}
+
+/** An empty channel. */
+function zeros(width: number, height: number): Float32Array {
+	return new Float32Array(width * height)
+}
+`
+
+	const list = `
+/** Every two-channel soliton, in the order they appear in 222.json. */
+export const SOLITONS: readonly ChannelCreature[] = [
+${creatures.map((c) => `\t${c.id},`).join("\n")}
+]
+`
+
+	const body = creatures.map((c) => c.source).join("\n")
+	writeFileSync(outputPath, `${header}\n${body}${list}`)
+	console.log(`Wrote ${creatures.length} creatures to ${outputPath}`)
+}
+
+main()
