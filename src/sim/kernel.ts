@@ -82,7 +82,7 @@ export function buildRingShell(
 	for (let y = -kernelRadius; y <= kernelRadius; y++) {
 		for (let x = -kernelRadius; x <= kernelRadius; x++) {
 			const distance = Math.hypot(x, y) / kernelRadius
-			const weight = distance < 1 ? shellWeight(distance, peaks) : 0
+			const weight = distance <= 1 ? shellWeight(distance, peaks) : 0
 			weights[(y + kernelRadius) * size + (x + kernelRadius)] = weight
 			sum += weight
 		}

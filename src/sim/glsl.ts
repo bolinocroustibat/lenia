@@ -103,9 +103,11 @@ void main() {
 // A_dest <- clip(A_dest + dt * sum (weight * G(K * A_source)), 0, 1)
 // Each sensor has its own ring, its own polynomial growth, and a weight that
 // already sums to 1 among the sensors writing into that destination.
-// The loop bounds match MAX_SENSORS and MAX_KERNEL_RADIUS.
+// The sensor loop is bounded by MAX_SENSORS; each convolution loops over that
+// sensor's own radius, so cost scales with the kernels, not MAX_KERNEL_RADIUS.
 export const CHANNEL_FRAG = `#version 300 es
 precision highp float;
+precision highp int;
 precision highp sampler2DArray;
 uniform sampler2D u_state;
 uniform highp sampler2DArray u_kernels;
@@ -122,7 +124,6 @@ uniform int u_dest[${MAX_SENSORS}];
 in vec2 v_uv;
 out vec4 out_color;
 
-const int MAX_R = ${MAX_KERNEL_RADIUS};
 const int MAX_SENSORS = ${MAX_SENSORS};
 
 float growth(float potential, float mu, float sigma) {
@@ -141,9 +142,8 @@ float channelOf(vec3 state, int channel) {
 float convolve(vec2 uv, int sensor, int radius, int source) {
 	int atlas = int(u_atlasRadius + 0.5);
 	float sum = 0.0;
-	for (int dy = -MAX_R; dy <= MAX_R; dy++) {
-		for (int dx = -MAX_R; dx <= MAX_R; dx++) {
-			if (abs(dx) > radius || abs(dy) > radius) continue;
+	for (int dy = -radius; dy <= radius; dy++) {
+		for (int dx = -radius; dx <= radius; dx++) {
 			float weight = texelFetch(u_kernels, ivec3(dx + atlas, dy + atlas, sensor), 0).r;
 			vec2 sampleUv = uv + vec2(float(dx), float(dy)) * u_texelSize;
 			sum += weight * channelOf(texture(u_state, sampleUv).rgb, source);

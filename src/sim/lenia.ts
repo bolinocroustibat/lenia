@@ -343,6 +343,8 @@ export class LeniaSimulation {
 		gl.uniform1f(this.channelUniforms.atlasRadius, atlasRadius)
 		gl.uniform1i(this.channelUniforms.sensorCount, rule.sensors.length)
 		this.quad.draw(this.channelProgram)
+		gl.activeTexture(gl.TEXTURE1)
+		gl.bindTexture(gl.TEXTURE_2D_ARRAY, null)
 		targets.swap()
 	}
 
