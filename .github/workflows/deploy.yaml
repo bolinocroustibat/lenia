@@ -9,12 +9,10 @@ permissions:
   contents: write
 
 jobs:
-
   bump-version:
     name: Bump version to ${{ github.ref_name }}
     runs-on: ubuntu-latest
     steps:
-
       - name: Checkout main
         uses: actions/checkout@v4
         with:
@@ -32,7 +30,6 @@ jobs:
           commit_user_email: me@adriencarpentier.com
           commit_author: Adrien Carpentier <me@adriencarpentier.com>
 
-
   build-and-deploy:
     name: Deploy ${{ github.ref_name }} to prod
     runs-on: ubuntu-latest
@@ -42,7 +39,6 @@ jobs:
       VITE_ENVIRONMENT: "production"
     needs: bump-version
     steps:
-
       - name: Checkout main after bump
         uses: actions/checkout@v4
         with:

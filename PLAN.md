@@ -21,17 +21,17 @@ flowchart LR
 
 Nine genotypes, each with six sensors (two self-rules per channel, plus one each way). Time step is `1 / T = 0.1`. Missing `h` is 1. Missing `r` is 1, so every sensor uses the full base radius. `b` is the ring heights.
 
-| Code | Name in the file | R | Why it is here |
-| --- | --- | --- | --- |
-| Found #5 | object | 20 | Only named one. Two overlapping blobs. |
-| Found #29 | | 20 | Compact pair. |
-| Found #30 | | 15 | Compact, fits today’s radius cap. |
-| Found #33 | | 15 | Longer body. |
-| Found #8 | | 20 | Larger soliton. |
-| Found #19 | | 20 | Large field. |
-| Found #20 | | 20 | Large field. |
-| Found #35 | | 15 | Large field. |
-| (none) | pattern | 14 | Smallest radius. |
+| Code      | Name in the file | R   | Why it is here                         |
+| --------- | ---------------- | --- | -------------------------------------- |
+| Found #5  | object           | 20  | Only named one. Two overlapping blobs. |
+| Found #29 |                  | 20  | Compact pair.                          |
+| Found #30 |                  | 15  | Compact, fits today’s radius cap.      |
+| Found #33 |                  | 15  | Longer body.                           |
+| Found #8  |                  | 20  | Larger soliton.                        |
+| Found #19 |                  | 20  | Large field.                           |
+| Found #20 |                  | 20  | Large field.                           |
+| Found #35 |                  | 15  | Large field.                           |
+| (none)    | pattern          | 14  | Smallest radius.                       |
 
 Decode every pattern. Add a button for each one that stays alive after Play. Drop any that die or flood. Expect a few compact ones to survive (`object`, #29, #30) and do not invent replacements.
 
