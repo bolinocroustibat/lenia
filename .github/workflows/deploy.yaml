@@ -1,7 +1,9 @@
-name: Deploy to prod when tag
+name: Deploy to prod
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "*"
 
@@ -11,6 +13,7 @@ permissions:
 jobs:
   bump-version:
     name: Bump version to ${{ github.ref_name }}
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
@@ -31,18 +34,24 @@ jobs:
           commit_author: Adrien Carpentier <me@adriencarpentier.com>
 
   build-and-deploy:
-    name: Deploy ${{ github.ref_name }} to prod
+    name: Deploy to prod
+    # Skip the follow-up main push from bump-version to avoid a double deploy on tags.
+    if: |
+      always() &&
+      (needs.bump-version.result == 'success' || needs.bump-version.result == 'skipped') &&
+      !(github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore: bump version'))
     runs-on: ubuntu-latest
     environment: production
+    needs: bump-version
     env:
       VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       VITE_ENVIRONMENT: "production"
-    needs: bump-version
     steps:
-      - name: Checkout main after bump
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          # After a tag bump, deploy the updated main; otherwise the pushed commit.
+          ref: ${{ startsWith(github.ref, 'refs/tags/') && 'main' || github.sha }}
 
       - name: Cache Bun dependencies
         uses: actions/cache@v4
